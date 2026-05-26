@@ -65,6 +65,10 @@ business perspective - easier onboarding and offboarding
 - **on road**- use spend based calculation
 - dont use builtin **carbon_kg** - might differ from our calculations
 
+- navan/concur has 2 types of exports 
+    1. iternary report
+    2. audit report - we will use this as it account for only taken trips
+
 - hardships
     - no distances only airport codes.
     - can be connecting flights - flag routes
@@ -73,3 +77,8 @@ business perspective - easier onboarding and offboarding
     - gap might be present eg: makemytrip
 ---
 
+
+`challenge right now -`
+---
+enforcing internal schema and tracability
+---
