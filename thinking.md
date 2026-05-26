@@ -38,6 +38,10 @@ business perspective - easier onboarding and offboarding
         - I am thinking csv as we can make use of simple SQL joins for lookup table, row level locking & normalisation 
     - can have malformed data, missing columns etc
     - need to understand codes in SAP
+
+    - MATKL - material group
+    - MEINS - units of measurement 
+    these are critical
     
 ---
 
@@ -105,7 +109,7 @@ canonical table for internal consistency
 should think of :
 - flagging missing data/gaps
 
-
+---
 ## **finalising decissions**
 
 sile upload -> source file -> parsing + normalisation (canonical form) -> scan for suspisions (draft rules) -> audit lock
@@ -116,5 +120,21 @@ tables:
 - types & units
 - source file - out of three, by who, no of rows etc
 - raw file (shouldn't edit)
-- canonical table
+- canonical table - 3
 - audit table (shouldn't edit)
+---
+
+instead of only 1 canonical table - split into 3 
+1. SAP - material & quantity centric
+2. utility - kwtt consumed 
+3. commute - payment centric 
+'calculating the emission acc to this simplified approach for version 1'
+
+---
+#### Rules for suspicion flagging -
+negative values
+mismatch in units
+unknown codes
+duplicate row
+gap in dates
+---
