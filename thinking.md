@@ -82,3 +82,26 @@ business perspective - easier onboarding and offboarding
 ---
 enforcing internal schema and tracability
 ---
+
+Rough - timeline
+
+data modelling - 
+
+3 tables for each ingestion - sap, power, travel
+
+canonical table for internal consistency
+
+- we will have a single table that is populated throught 3 sources
+- never delete the original unnormalised data
+- create columns for normalised data
+- enforce id's and keys
+- implementing audit log using row level locking
+
+### skipping 
+- ocr
+- auto schema inference
+- iternary reconstruction
+
+should think of :
+- flagging missing data/gaps
+- 
