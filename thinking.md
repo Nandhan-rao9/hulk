@@ -60,7 +60,7 @@ business perspective - easier onboarding and offboarding
 ## 3 . Travel - navan, concur
 
 - flight, hotels, on road
-- file upload avoids all the auth barriers, api option could be looked into at a later stage.
+- [file upload avoids all the auth barriers, api option could be looked into at a later stage.](https://www.graphed.com/blog/how-to-export-concur-report-to-excel)
 - **hotels** - identify country and star rating
 - **on road**- use spend based calculation
 - dont use builtin **carbon_kg** - might differ from our calculations
@@ -104,4 +104,17 @@ canonical table for internal consistency
 
 should think of :
 - flagging missing data/gaps
-- 
+
+
+## **finalising decissions**
+
+sile upload -> source file -> parsing + normalisation (canonical form) -> scan for suspisions (draft rules) -> audit lock
+
+tables:
+- organisation - diff branches
+- lookup table
+- types & units
+- source file - out of three, by who, no of rows etc
+- raw file (shouldn't edit)
+- canonical table
+- audit table (shouldn't edit)
