@@ -133,8 +133,10 @@ instead of only 1 canonical table - split into 3
 ---
 #### Rules for suspicion flagging -
 negative values
-mismatch in units
+mismatch in units 
 unknown codes
-duplicate row
+duplicate row - can use hashing to solve
 gap in dates
 ---
+
+starting csv generation
