@@ -1,0 +1,13 @@
+source_type,code,facility_name,city,country
+SAP,1001,Hyderabad Manufacturing Plant 1,Hyderabad,India
+SAP,1002,Bangalore R&D Facility,Bangalore,India
+SAP,1003,Chennai Operations Center,Chennai,India
+SAP,1004,Mumbai Warehouse,Mumbai,India
+SAP,1005,Pune Production Unit,Pune,India
+UTILITY,550012345,Hyderabad Manufacturing Plant 1,Hyderabad,India
+UTILITY,550012346,Hyderabad Manufacturing Plant 1,Hyderabad,India
+UTILITY,550012347,Bangalore R&D Facility,Bangalore,India
+UTILITY,550012348,Chennai Operations Center,Chennai,India
+UTILITY,550012349,Mumbai Warehouse,Mumbai,India
+UTILITY,550012350,Pune Production Unit,Pune,India
+UTILITY,550012351,Pune Production Unit,Pune,India
