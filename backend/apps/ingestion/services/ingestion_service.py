@@ -88,15 +88,21 @@ class IngestionService:
             ValueError: If file is a duplicate
             Exception: Any parsing or database errors
         """
-        # Step 1: Duplicate detection
+        # Step 1: Duplicate detection (only block if PROCESSING or DONE)
         file_content = self._read_file_content()
         file_hash = SourceFile.compute_hash(file_content)
 
-        if SourceFile.objects.filter(org=self.org, file_hash=file_hash).exists():
-            existing = SourceFile.objects.get(org=self.org, file_hash=file_hash)
+        existing = SourceFile.objects.filter(
+            org=self.org,
+            file_hash=file_hash,
+            status__in=['PROCESSING', 'DONE']
+        ).first()
+
+        if existing:
             raise ValueError(
                 f"Duplicate file detected. Already uploaded as '{existing.original_filename}' "
-                f"on {existing.uploaded_at.strftime('%Y-%m-%d %H:%M')}"
+                f"on {existing.uploaded_at.strftime('%Y-%m-%d %H:%M')} with status {existing.status}. "
+                f"Delete the existing file first to re-upload."
             )
 
         # Step 2: Create SourceFile
@@ -127,13 +133,8 @@ class IngestionService:
             source_file.status = 'FAILED'
             source_file.save()
 
-            # Log failure
-            AuditLog.objects.create(
-                source_file=source_file,
-                action='FILE_INVALIDATED',
-                performed_by=self.user,
-                note=f"Ingestion failed: {str(e)}"
-            )
+            # Note: Not logging to AuditLog here - FAILED status is sufficient
+            # FILE_INVALIDATED action is for user-initiated invalidation, not parse errors
 
             raise
 
@@ -225,7 +226,16 @@ class IngestionService:
                     activity.flag(flag)
                 stats['flagged'] += 1
 
-            # Audit log
+                # Log flagging
+                AuditLog.objects.create(
+                    activity=activity,
+                    source_file=source_file,
+                    action='FLAGGED',
+                    performed_by=None,  # System action
+                    note=f"Flagged during ingestion: {', '.join(result.suspicious_flags)}"
+                )
+
+            # Audit log for ingestion
             AuditLog.objects.create(
                 activity=activity,
                 source_file=source_file,
