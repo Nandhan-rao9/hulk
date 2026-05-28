@@ -8,9 +8,18 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.authentication import SessionAuthentication
 
 from apps.ingestion.models import SourceFile
 from apps.ingestion.serializers import SourceFileSerializer, FileUploadSerializer
+
+
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    """
+    SessionAuthentication without CSRF check for cross-origin requests.
+    """
+    def enforce_csrf(self, request):
+        return  # Skip CSRF check
 
 
 class SourceFileViewSet(viewsets.ModelViewSet):
@@ -81,7 +90,8 @@ class SourceFileViewSet(viewsets.ModelViewSet):
         detail=False,
         methods=['post'],
         serializer_class=FileUploadSerializer,
-        parser_classes=[MultiPartParser, FormParser]
+        parser_classes=[MultiPartParser, FormParser],
+        authentication_classes=[CsrfExemptSessionAuthentication]
     )
     def upload(self, request):
         """
