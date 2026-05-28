@@ -173,22 +173,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 100,
 }
 
-# CORS Settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite default
-    "http://127.0.0.1:5173",
-    "http://localhost:5174",  # Alternate Vite port
-    "http://127.0.0.1:5174",
-]
-CORS_ALLOW_CREDENTIALS = True
-
-# CSRF Settings
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5174",
-]
+# CORS and CSRF are configured at top of file via environment variables
 
 # Session Settings
 SESSION_COOKIE_SAMESITE = 'Lax'
