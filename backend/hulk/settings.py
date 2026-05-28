@@ -176,6 +176,11 @@ REST_FRAMEWORK = {
 # CORS and CSRF are configured at top of file via environment variables
 
 # Session Settings
-SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-origin requests (Vercel → Railway)
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+SESSION_COOKIE_SECURE = True  # Required when SameSite=None and using HTTPS
+
+# CSRF Cookie Settings
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = False  # Must be False so JavaScript can read it
