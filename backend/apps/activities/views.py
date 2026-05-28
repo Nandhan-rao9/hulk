@@ -163,6 +163,10 @@ class ActivityViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Approve an activity.
 
+        Behavior depends on user role:
+        - Analyst: Moves activity to PENDING (waiting for admin)
+        - Admin: Moves activity to APPROVED (final sign-off)
+
         Request body (optional):
         {
             "note": "Reviewed and approved"
@@ -170,24 +174,180 @@ class ActivityViewSet(viewsets.ReadOnlyModelViewSet):
 
         Returns:
             200: Activity approved successfully
-            400: Activity already approved/locked
+            400: Activity already approved/locked, or invalid state
+            403: Permission denied
             404: Activity not found
         """
         activity = self.get_object()
+        user = request.user
 
-        # Check if already approved or locked
-        if activity.status in ['APPROVED', 'LOCKED']:
+        # Check if already locked
+        if activity.status == 'LOCKED':
             return Response(
-                {'detail': f'Activity already {activity.status.lower()}'},
+                {'detail': 'Activity is locked'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validate and approve
-        serializer = self.get_serializer(activity, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # Check if already approved
+        if activity.status == 'APPROVED':
+            return Response(
+                {'detail': 'Activity already approved'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # Return updated activity
-        activity.refresh_from_db()
-        response_serializer = ActivityListSerializer(activity)
-        return Response(response_serializer.data)
+        note = request.data.get('note', '')
+
+        try:
+            if user.is_admin():
+                # Admin can directly approve
+                activity.approve_by_admin(user, note)
+                message = 'Activity approved by admin'
+            elif user.is_analyst():
+                # Analyst moves to pending
+                activity.approve_by_analyst(user, note)
+                message = 'Activity moved to pending (waiting for admin approval)'
+            else:
+                return Response(
+                    {'detail': 'User does not have permission to approve activities'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Return updated activity
+            activity.refresh_from_db()
+            response_serializer = ActivityListSerializer(activity)
+            return Response({
+                'message': message,
+                'activity': response_serializer.data
+            })
+
+        except PermissionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    @action(detail=True, methods=['post'])
+    def flag(self, request, pk=None):
+        """
+        Manually flag an activity as suspicious. Only admins can flag.
+
+        Can be used to:
+        - Flag activities during review
+        - Re-flag a PENDING or APPROVED activity if an error is discovered
+
+        Request body:
+        {
+            "reason": "incorrect_plant_code",
+            "note": "Plant code doesn't match facility records"
+        }
+
+        Returns:
+            200: Activity flagged successfully
+            400: Invalid request or activity cannot be flagged
+            403: Permission denied (only admins can flag)
+            404: Activity not found
+        """
+        activity = self.get_object()
+        user = request.user
+
+        # Only admins can flag
+        if not user.is_admin():
+            return Response(
+                {'detail': 'Only admins can flag activities'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Don't allow flagging locked/invalidated
+        if activity.status in ['LOCKED', 'INVALIDATED']:
+            return Response(
+                {'detail': f'Cannot flag {activity.status.lower()} activity'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Track if we're re-flagging an approved activity
+        was_approved = activity.status == 'APPROVED'
+
+        reason = request.data.get('reason')
+        note = request.data.get('note', '')
+
+        if not reason:
+            return Response(
+                {'detail': 'Flag reason is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Use model method (includes audit log)
+            activity.flag(reason, flagged_by=user)
+
+            # If activity was approved, revoke approval
+            if was_approved:
+                activity.approved_by = None
+                activity.approved_at = None
+                activity.save()
+
+            # Return updated activity
+            activity.refresh_from_db()
+            response_serializer = ActivityListSerializer(activity)
+            return Response(response_serializer.data)
+
+        except PermissionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    @action(detail=True, methods=['post'])
+    def unflag(self, request, pk=None):
+        """
+        Remove suspicious flag from an activity. Only admins can unflag.
+
+        Request body (optional):
+        {
+            "note": "Verified with vendor - amount is correct"
+        }
+
+        Returns:
+            200: Activity unflagged successfully
+            400: Activity is not flagged or cannot be unflagged
+            403: Permission denied (only admins can unflag)
+            404: Activity not found
+        """
+        activity = self.get_object()
+        user = request.user
+
+        # Only admins can unflag
+        if not user.is_admin():
+            return Response(
+                {'detail': 'Only admins can unflag activities'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not activity.is_suspicious:
+            return Response(
+                {'detail': 'Activity is not flagged'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if activity.status in ['LOCKED', 'INVALIDATED']:
+            return Response(
+                {'detail': f'Cannot unflag {activity.status.lower()} activity'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        note = request.data.get('note', '')
+
+        try:
+            # Use model method (includes audit log and counter sync)
+            activity.unflag(user, note)
+
+            # Return updated activity
+            activity.refresh_from_db()
+            response_serializer = ActivityListSerializer(activity)
+            return Response(response_serializer.data)
+
+        except PermissionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_403_FORBIDDEN
+            )

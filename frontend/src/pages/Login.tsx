@@ -108,12 +108,39 @@ export default function Login() {
 
             {/* Demo Credentials */}
             <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900 rounded-lg">
-              <div className="text-sm text-blue-900 dark:text-blue-100 font-medium mb-2">
-                Demo Credentials:
+              <div className="text-sm text-blue-900 dark:text-blue-100 font-medium mb-3">
+                Demo Credentials
               </div>
-              <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                <div><span className="font-medium">Username:</span> admin</div>
-                <div><span className="font-medium">Password:</span> admin123</div>
+              <div className="text-xs text-blue-800 dark:text-blue-200 space-y-3">
+                {/* Acme Manufacturing */}
+                <div className="space-y-1">
+                  <div className="font-semibold text-blue-900 dark:text-blue-100">Acme Manufacturing Ltd</div>
+                  <div className="grid grid-cols-2 gap-2 ml-2">
+                    <div>
+                      <div className="font-medium">Admin:</div>
+                      <div className="text-[10px] font-mono">acme_admin / admin123</div>
+                    </div>
+                    <div>
+                      <div className="font-medium">Analyst:</div>
+                      <div className="text-[10px] font-mono">acme_analyst / analyst123</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TechCorp Industries */}
+                <div className="space-y-1">
+                  <div className="font-semibold text-blue-900 dark:text-blue-100">TechCorp Industries</div>
+                  <div className="grid grid-cols-2 gap-2 ml-2">
+                    <div>
+                      <div className="font-medium">Admin:</div>
+                      <div className="text-[10px] font-mono">tech_admin / admin123</div>
+                    </div>
+                    <div>
+                      <div className="font-medium">Analyst:</div>
+                      <div className="text-[10px] font-mono">tech_analyst / analyst123</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>

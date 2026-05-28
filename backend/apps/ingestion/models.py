@@ -34,6 +34,7 @@ class SourceFile(models.Model):
     total_rows = models.IntegerField(null=True, blank=True)
     failed_rows = models.IntegerField(null=True, blank=True, default=0)
     flagged_rows = models.IntegerField(null=True, blank=True, default=0)
+    pending_rows = models.IntegerField(null=True, blank=True, default=0, help_text="Analyst approved, waiting for admin")
     approved_rows = models.IntegerField(null=True, blank=True, default=0)
 
     class Meta:
@@ -64,6 +65,18 @@ class SourceFile(models.Model):
                 hasher.update(chunk)
             file_content.seek(0)  # Reset file pointer
             return hasher.hexdigest()
+
+    def sync_counters(self):
+        """
+        Recalculate all counter fields from related records.
+        Call this after any status change to keep counters in sync.
+        """
+        self.total_rows = self.raw_records.count()
+        self.failed_rows = self.raw_records.filter(parse_status='FAILED').count()
+        self.flagged_rows = self.activities.filter(status='FLAGGED').count()
+        self.pending_rows = self.activities.filter(status='PENDING').count()
+        self.approved_rows = self.activities.filter(status='APPROVED').count()
+        self.save(update_fields=['total_rows', 'failed_rows', 'flagged_rows', 'pending_rows', 'approved_rows'])
 
 
 class RawRecord(models.Model):

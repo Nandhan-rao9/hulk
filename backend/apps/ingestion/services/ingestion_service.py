@@ -227,17 +227,12 @@ class IngestionService:
 
             # Apply suspicious flags (single save for all flags)
             if result.suspicious_flags:
-                activity.flag(result.suspicious_flags)  # Pass all flags at once
-                stats['flagged'] += 1
-
-                # Log flagging
-                AuditLog.objects.create(
-                    activity=activity,
-                    source_file=source_file,
-                    action='FLAGGED',
-                    performed_by=None,  # System action
+                activity.flag(
+                    result.suspicious_flags,
+                    flagged_by=None,  # System action
                     note=f"Flagged during ingestion: {', '.join(result.suspicious_flags)}"
                 )
+                stats['flagged'] += 1
             else:
                 # Auto-approve clean rows
                 activity.status = 'APPROVED'
@@ -274,26 +269,20 @@ class IngestionService:
                     was_approved = activity.status == 'APPROVED'
 
                     # Apply all finalization flags at once (single save)
-                    activity.flag(flag_names)
+                    activity.flag(
+                        flag_names,
+                        flagged_by=None,  # System action
+                        note=f"Post-processing flags: {', '.join(flag_names)}"
+                    )
 
                     # Update flagged count if newly flagged
                     if not was_flagged and activity.is_suspicious:
                         stats['flagged'] += 1
 
-                        # If was auto-approved, need to revert to PENDING and decrement approved count
+                        # If was auto-approved, remove it from approved stats.
+                        # activity.flag() already moved it to FLAGGED.
                         if was_approved:
-                            activity.status = 'PENDING'
-                            activity.save()
                             stats['approved'] -= 1
-
-                    # Log finalization flags
-                    AuditLog.objects.create(
-                        activity=activity,
-                        source_file=source_file,
-                        action='FLAGGED',
-                        performed_by=None,
-                        note=f"Post-processing flags: {', '.join(flag_names)}"
-                    )
 
         return stats
 

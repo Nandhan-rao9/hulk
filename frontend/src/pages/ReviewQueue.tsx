@@ -5,8 +5,10 @@ import Button from '../components/Button';
 import Badge from '../components/Badge';
 import { activitiesApi, type Activity } from '../lib/api';
 import { cn, formatDate, formatNumber, formatCurrency } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ReviewQueue() {
+  const { isAdmin } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -19,6 +21,11 @@ export default function ReviewQueue() {
   const [showFilters, setShowFilters] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
+  // Flag dialog state
+  const [flagDialogActivity, setFlagDialogActivity] = useState<number | null>(null);
+  const [flagReason, setFlagReason] = useState('');
+  const [flagNote, setFlagNote] = useState('');
+
   useEffect(() => {
     fetchActivities();
   }, [filters]);
@@ -28,8 +35,9 @@ export default function ReviewQueue() {
     try {
       const params: any = {};
       if (filters.status) {
+        // DRF accepts multiple status params as separate keys
         const statuses = filters.status.split(',');
-        statuses.forEach(s => params.status = s); // DRF accepts multiple status params
+        params.status = statuses; // Axios will serialize array as status=PENDING&status=FLAGGED
       }
       if (filters.is_suspicious) params.is_suspicious = filters.is_suspicious;
       if (filters.search) params.search = filters.search;
@@ -47,10 +55,13 @@ export default function ReviewQueue() {
 
   const handleApprove = async (id: number) => {
     try {
-      await activitiesApi.approve(id);
+      const response = await activitiesApi.approve(id);
+      alert(response.data.message);
       fetchActivities();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to approve activity:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to approve activity';
+      alert(errorMsg);
     }
   };
 
@@ -77,15 +88,45 @@ export default function ReviewQueue() {
     }
   };
 
+  const handleFlag = async () => {
+    if (!flagDialogActivity || !flagReason) return;
+
+    try {
+      await activitiesApi.flag(flagDialogActivity, flagReason, flagNote);
+      setFlagDialogActivity(null);
+      setFlagReason('');
+      setFlagNote('');
+      fetchActivities();
+    } catch (error: any) {
+      console.error('Failed to flag activity:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to flag activity';
+      alert(errorMsg);
+    }
+  };
+
+  const handleUnflag = async (id: number) => {
+    const note = prompt('Reason for clearing flags (optional):');
+    if (note === null) return; // User cancelled
+
+    try {
+      await activitiesApi.unflag(id, note || undefined);
+      fetchActivities();
+    } catch (error: any) {
+      console.error('Failed to unflag activity:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to unflag activity';
+      alert(errorMsg);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
-      PENDING: { variant: 'default', label: 'Pending' },
+      PENDING: { variant: 'info', label: 'Pending Admin' },
       FLAGGED: { variant: 'warning', label: 'Flagged' },
       APPROVED: { variant: 'success', label: 'Approved' },
-      LOCKED: { variant: 'info', label: 'Locked' },
+      LOCKED: { variant: 'default', label: 'Locked' },
       INVALIDATED: { variant: 'danger', label: 'Invalidated' },
     };
-    const config = variants[status] || variants.PENDING;
+    const config = variants[status] || variants.FLAGGED;
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
@@ -327,8 +368,8 @@ export default function ReviewQueue() {
                 >
                   <option value="">All</option>
                   <option value="PENDING,FLAGGED">Pending & Flagged</option>
-                  <option value="PENDING">Pending Only</option>
-                  <option value="FLAGGED">Flagged Only</option>
+                  <option value="FLAGGED">Flagged (Needs Review)</option>
+                  <option value="PENDING">Pending Admin Approval</option>
                   <option value="APPROVED">Approved</option>
                 </select>
               </div>
@@ -443,20 +484,39 @@ export default function ReviewQueue() {
                         <Badge size="sm" variant="default">{activity.source_type}</Badge>
                       </td>
                       <td className="px-4 py-4">
-                        {(activity.status === 'PENDING' || activity.status === 'FLAGGED') && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleApprove(activity.id);
-                            }}
-                            className="gap-1"
-                          >
-                            <CheckCircle className="h-3 w-3" />
-                            Approve
-                          </Button>
-                        )}
+                        <div className="flex items-center space-x-2">
+                          {activity.status === 'FLAGGED' && (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApprove(activity.id);
+                              }}
+                              className="gap-1"
+                            >
+                              <CheckCircle className="h-3 w-3" />
+                              {isAdmin ? 'Approve' : 'Send for Approval'}
+                            </Button>
+                          )}
+                          {activity.status === 'PENDING' && isAdmin && (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApprove(activity.id);
+                              }}
+                              className="gap-1"
+                            >
+                              <CheckCircle className="h-3 w-3" />
+                              Final Approve
+                            </Button>
+                          )}
+                          {activity.status === 'PENDING' && !isAdmin && (
+                            <Badge variant="info" size="sm">Waiting for Admin</Badge>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {expandedRow === activity.id && (
@@ -465,23 +525,56 @@ export default function ReviewQueue() {
                           <div className="space-y-4">
                             {activity.flag_reason && (
                               <div className="p-3 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-900 rounded-lg">
-                                <div className="flex items-start space-x-2">
-                                  <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                                  <div>
-                                    <div className="text-sm font-medium text-yellow-900 dark:text-yellow-100 mb-1">
-                                      Suspicious Flags
-                                    </div>
-                                    <div className="flex flex-wrap gap-1">
-                                      {activity.flag_reason.split('|').map((flag) => (
-                                        <Badge key={flag} variant="warning" size="sm">
-                                          {flag.replace(/_/g, ' ')}
-                                        </Badge>
-                                      ))}
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-start space-x-2">
+                                    <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                      <div className="text-sm font-medium text-yellow-900 dark:text-yellow-100 mb-1">
+                                        Suspicious Flags
+                                      </div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {activity.flag_reason.split('|').map((flag) => (
+                                          <Badge key={flag} variant="warning" size="sm">
+                                            {flag.replace(/_/g, ' ')}
+                                          </Badge>
+                                        ))}
+                                      </div>
                                     </div>
                                   </div>
+                                  {isAdmin && activity.status !== 'LOCKED' && activity.status !== 'INVALIDATED' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUnflag(activity.id);
+                                      }}
+                                      className="gap-1 text-xs"
+                                    >
+                                      Clear Flags
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             )}
+
+                            {isAdmin && !activity.is_suspicious && activity.status !== 'LOCKED' && activity.status !== 'INVALIDATED' && (
+                              <div className="flex justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setFlagDialogActivity(activity.id);
+                                  }}
+                                  className="gap-1 text-yellow-600 border-yellow-300 hover:bg-yellow-50 dark:hover:bg-yellow-900/10"
+                                >
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Flag for Review
+                                </Button>
+                              </div>
+                            )}
+
                             <div className="p-4 bg-background border rounded-lg">
                               {renderDetailRow(activity)}
                             </div>
@@ -496,6 +589,71 @@ export default function ReviewQueue() {
           </table>
         </div>
       </Card>
+
+      {/* Flag Dialog Modal */}
+      {flagDialogActivity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setFlagDialogActivity(null)}>
+          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <Card>
+              <div className="p-6">
+                <h2 className="text-xl font-bold mb-4">Flag Activity</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Flag Reason <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={flagReason}
+                      onChange={(e) => setFlagReason(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      <option value="">Select reason...</option>
+                      <option value="incorrect_amount">Incorrect Amount</option>
+                      <option value="incorrect_date">Incorrect Date</option>
+                      <option value="incorrect_plant">Incorrect Plant Code</option>
+                      <option value="duplicate_suspected">Suspected Duplicate</option>
+                      <option value="missing_documentation">Missing Documentation</option>
+                      <option value="unusual_quantity">Unusual Quantity</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Additional Notes</label>
+                    <textarea
+                      value={flagNote}
+                      onChange={(e) => setFlagNote(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      rows={3}
+                      placeholder="Explain why this activity needs review..."
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setFlagDialogActivity(null);
+                        setFlagReason('');
+                        setFlagNote('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={handleFlag}
+                      disabled={!flagReason}
+                      className="gap-2"
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Flag Activity
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

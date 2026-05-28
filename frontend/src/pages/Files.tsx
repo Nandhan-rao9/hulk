@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, CheckCircle, XCircle, Clock, ChevronRight, Trash2, Eye, ListChecks } from 'lucide-react';
+import { FileText, CheckCircle, XCircle, Clock, Trash2, Eye, ListChecks } from 'lucide-react';
 import { Card } from '../components/Card';
 import Badge from '../components/Badge';
 import Button from '../components/Button';
@@ -139,16 +139,22 @@ export default function Files() {
                             <div className="text-xs text-muted-foreground">Approved</div>
                           </div>
                         )}
-                        {file.failed_rows! > 0 && (
+                        {file.pending_rows! > 0 && (
                           <div className="text-center">
-                            <div className="text-2xl font-semibold text-destructive">{file.failed_rows}</div>
-                            <div className="text-xs text-muted-foreground">Failed</div>
+                            <div className="text-2xl font-semibold text-blue-600">{file.pending_rows}</div>
+                            <div className="text-xs text-muted-foreground">Pending</div>
                           </div>
                         )}
                         {file.flagged_rows! > 0 && (
                           <div className="text-center">
                             <div className="text-2xl font-semibold text-yellow-600">{file.flagged_rows}</div>
                             <div className="text-xs text-muted-foreground">Flagged</div>
+                          </div>
+                        )}
+                        {file.failed_rows! > 0 && (
+                          <div className="text-center">
+                            <div className="text-2xl font-semibold text-destructive">{file.failed_rows}</div>
+                            <div className="text-xs text-muted-foreground">Failed</div>
                           </div>
                         )}
                       </>

@@ -1,19 +1,27 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, TrendingUp, Zap, Plane, Building2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FileText, Zap, Plane, Building2, AlertCircle, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/Card';
 import Badge from '../components/Badge';
 import Button from '../components/Button';
-import { sourceFilesApi, type FileActivitiesResponse, type FileSummaryResponse } from '../lib/api';
+import { sourceFilesApi, activitiesApi, type FileActivitiesResponse, type FileSummaryResponse } from '../lib/api';
 import { formatNumber, formatDate } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function FileDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [data, setData] = useState<FileActivitiesResponse | null>(null);
   const [summary, setSummary] = useState<FileSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  // Flag dialog state
+  const [flagDialogActivity, setFlagDialogActivity] = useState<number | null>(null);
+  const [flagReason, setFlagReason] = useState('');
+  const [flagNote, setFlagNote] = useState('');
 
   useEffect(() => {
     loadData();
@@ -54,6 +62,24 @@ export default function FileDetail() {
     return 'text-blue-600';
   };
 
+  const handleFlag = async () => {
+    if (!flagDialogActivity || !flagReason) return;
+
+    try {
+      await activitiesApi.flag(flagDialogActivity, flagReason, flagNote);
+      setFlagDialogActivity(null);
+      setFlagReason('');
+      setFlagNote('');
+      // Reload data to refresh status
+      loadData();
+      alert('Activity flagged successfully. It will now appear in the Review Queue.');
+    } catch (error: any) {
+      console.error('Failed to flag activity:', error);
+      const errorMsg = error.response?.data?.detail || 'Failed to flag activity';
+      alert(errorMsg);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
@@ -81,8 +107,6 @@ export default function FileDetail() {
       </div>
     );
   }
-
-  const totalEmissions = data.activities.reduce((sum, a) => sum + a.emissions_kgco2e, 0);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -165,18 +189,20 @@ export default function FileDetail() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left text-sm text-muted-foreground">
+                  <th className="pb-3 font-medium w-8"></th>
                   <th className="pb-3 font-medium">Date</th>
                   <th className="pb-3 font-medium">Scope</th>
                   <th className="pb-3 font-medium">Category</th>
                   <th className="pb-3 font-medium">Facility/Detail</th>
                   <th className="pb-3 font-medium text-right">Metric</th>
                   <th className="pb-3 font-medium text-right">Emissions</th>
+                  <th className="pb-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {data.activities.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12">
+                    <td colSpan={8} className="py-12">
                       <div className="text-center">
                         <div className="flex items-center justify-center mb-4">
                           <AlertCircle className="h-12 w-12 text-muted-foreground" />
@@ -195,31 +221,118 @@ export default function FileDetail() {
                   </tr>
                 ) : (
                   data.activities.map((activity) => (
-                    <tr key={activity.id} className="hover:bg-muted/50 transition-colors">
-                      <td className="py-3 text-sm">
-                        {formatDate(activity.period_end)}
-                      </td>
-                      <td className="py-3">
-                        <span className={`text-sm font-medium ${getScopeColor(activity.scope)}`}>
-                          Scope {activity.scope}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <Badge variant="default" size="sm">
-                          {activity.category}
-                        </Badge>
-                      </td>
-                      <td className="py-3 text-sm">
-                        {activity.facility_name || activity.material || activity.service_number || activity.employee_id || '—'}
-                      </td>
-                      <td className="py-3 text-sm text-right font-mono">
-                        <div>{formatNumber(activity.metric_value)} {activity.metric_unit}</div>
-                        <div className="text-xs text-muted-foreground">{activity.metric_label}</div>
-                      </td>
-                      <td className="py-3 text-sm text-right font-mono">
-                        {formatNumber(activity.emissions_kgco2e)} kg CO₂e
-                      </td>
-                    </tr>
+                    <>
+                      <tr
+                        key={activity.id}
+                        className="hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => setExpandedRow(expandedRow === activity.id ? null : activity.id)}
+                      >
+                        <td className="py-3 px-2">
+                          {expandedRow === activity.id ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </td>
+                        <td className="py-3 text-sm">
+                          {formatDate(activity.period_end)}
+                        </td>
+                        <td className="py-3">
+                          <span className={`text-sm font-medium ${getScopeColor(activity.scope)}`}>
+                            Scope {activity.scope}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          <Badge variant="default" size="sm">
+                            {activity.category}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-sm">
+                          {activity.facility_name || activity.material || activity.service_number || activity.employee_id || '—'}
+                        </td>
+                        <td className="py-3 text-sm text-right font-mono">
+                          <div>{formatNumber(activity.metric_value)} {activity.metric_unit}</div>
+                          <div className="text-xs text-muted-foreground">{activity.metric_label}</div>
+                        </td>
+                        <td className="py-3 text-sm text-right font-mono">
+                          {formatNumber(activity.emissions_kgco2e)} kg CO₂e
+                        </td>
+                        <td className="py-3 text-right">
+                          {isAdmin && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFlagDialogActivity(activity.id);
+                              }}
+                              className="gap-1 text-yellow-600 border-yellow-300 hover:bg-yellow-50 dark:hover:bg-yellow-900/10"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              Flag
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+
+                      {/* Expanded Detail Row */}
+                      {expandedRow === activity.id && (
+                        <tr className="bg-muted/30">
+                          <td colSpan={8} className="px-4 py-4">
+                            <div className="space-y-3">
+                              <div className="text-sm font-medium text-muted-foreground mb-2">
+                                Activity Details
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground">Activity ID:</span>{' '}
+                                  <span className="font-medium">#{activity.id}</span>
+                                </div>
+                                {activity.material && (
+                                  <div>
+                                    <span className="text-muted-foreground">Material:</span>{' '}
+                                    <span className="font-medium">{activity.material}</span>
+                                  </div>
+                                )}
+                                {activity.service_number && (
+                                  <div>
+                                    <span className="text-muted-foreground">Service #:</span>{' '}
+                                    <span className="font-medium">{activity.service_number}</span>
+                                  </div>
+                                )}
+                                {activity.employee_id && (
+                                  <div>
+                                    <span className="text-muted-foreground">Employee:</span>{' '}
+                                    <span className="font-medium">{activity.employee_id}</span>
+                                  </div>
+                                )}
+                                {activity.mode && (
+                                  <div>
+                                    <span className="text-muted-foreground">Travel Mode:</span>{' '}
+                                    <span className="font-medium">{activity.mode}</span>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-muted-foreground">Metric:</span>{' '}
+                                  <span className="font-medium">{formatNumber(activity.metric_value)} {activity.metric_unit}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Emissions:</span>{' '}
+                                  <span className="font-medium">{formatNumber(activity.emissions_kgco2e)} kg CO₂e</span>
+                                </div>
+                              </div>
+                              {isAdmin && (
+                                <div className="pt-2 border-t">
+                                  <p className="text-xs text-muted-foreground italic">
+                                    Click "Flag" if you notice an error in this approved activity. It will be moved back to the Review Queue for correction.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))
                 )}
               </tbody>
@@ -227,6 +340,78 @@ export default function FileDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Flag Dialog Modal */}
+      {flagDialogActivity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setFlagDialogActivity(null)}>
+          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <Card>
+              <div className="p-6">
+                <h2 className="text-xl font-bold mb-4">Flag Approved Activity</h2>
+                <p className="text-sm text-muted-foreground mb-4">
+                  This activity will be moved back to the Review Queue and its approval will be revoked.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Flag Reason <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={flagReason}
+                      onChange={(e) => setFlagReason(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      <option value="">Select reason...</option>
+                      <option value="incorrect_amount">Incorrect Amount</option>
+                      <option value="incorrect_date">Incorrect Date</option>
+                      <option value="incorrect_plant">Incorrect Plant Code</option>
+                      <option value="duplicate_suspected">Suspected Duplicate</option>
+                      <option value="missing_documentation">Missing Documentation</option>
+                      <option value="unusual_quantity">Unusual Quantity</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Details / Notes *</label>
+                    <textarea
+                      value={flagNote}
+                      onChange={(e) => setFlagNote(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      rows={3}
+                      placeholder="Explain what needs to be corrected..."
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Required: Explain what's wrong so the reviewer knows what to fix.
+                    </p>
+                  </div>
+                  <div className="flex justify-end space-x-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setFlagDialogActivity(null);
+                        setFlagReason('');
+                        setFlagNote('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={handleFlag}
+                      disabled={!flagReason || !flagNote.trim()}
+                      className="gap-2"
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Flag Activity
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

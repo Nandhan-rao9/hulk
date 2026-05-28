@@ -67,6 +67,10 @@ class TravelDetailSerializer(serializers.ModelSerializer):
             'amount_raw',
             'currency',
             'amount_inr',
+            'fx_rate_used',
+            'fx_rate_date',
+            'fx_source',
+            'fx_note',
             'distance_method',
         ]
 
@@ -143,7 +147,10 @@ class ActivityApprovalSerializer(serializers.Serializer):
         user = self.context['request'].user
         note = validated_data.get('note', '')
 
-        # Use Activity.approve() helper method
-        instance.approve(user, note)
+        # Route to correct approval method based on role
+        if user.is_admin():
+            instance.approve_by_admin(user, note)
+        else:
+            instance.approve_by_analyst(user, note)
 
         return instance

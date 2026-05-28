@@ -29,6 +29,7 @@ class SourceFileSerializer(serializers.ModelSerializer):
             'total_rows',
             'failed_rows',
             'flagged_rows',
+            'pending_rows',
             'approved_rows',
         ]
         read_only_fields = [
@@ -39,6 +40,7 @@ class SourceFileSerializer(serializers.ModelSerializer):
             'total_rows',
             'failed_rows',
             'flagged_rows',
+            'pending_rows',
             'approved_rows',
         ]
 

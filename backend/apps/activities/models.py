@@ -31,11 +31,21 @@ class Activity(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
-        ('FLAGGED', 'Flagged'),
-        ('APPROVED', 'Approved'),
-        ('LOCKED', 'Locked'),
-        ('INVALIDATED', 'Invalidated'),
+        ('FLAGGED', 'Flagged'),  # Has issues, needs review
+        ('PENDING', 'Pending Admin Approval'),  # Analyst approved, waiting for admin
+        ('APPROVED', 'Approved'),  # Admin approved (final)
+        ('LOCKED', 'Locked'),  # Period locked
+        ('INVALIDATED', 'Invalidated'),  # File/activity invalidated
+    ]
+
+    MANUAL_FLAG_REASONS = [
+        ('incorrect_amount', 'Incorrect Amount'),
+        ('incorrect_date', 'Incorrect Date'),
+        ('incorrect_plant', 'Incorrect Plant Code'),
+        ('duplicate_suspected', 'Suspected Duplicate'),
+        ('missing_documentation', 'Missing Documentation'),
+        ('unusual_quantity', 'Unusual Quantity'),
+        ('other', 'Other'),
     ]
 
     org = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='activities')
@@ -71,7 +81,7 @@ class Activity(models.Model):
         blank=True,
         help_text="Calculated emissions in kgCO2e"
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='FLAGGED')
     is_suspicious = models.BooleanField(default=False)
     flag_reason = models.TextField(
         null=True,
@@ -105,15 +115,23 @@ class Activity(models.Model):
     def __str__(self):
         return f"{self.get_category_display()} - {self.period_end} ({self.get_status_display()})"
 
-    def flag(self, reasons):
+    def flag(self, reasons, flagged_by=None, note=''):
         """
         Flag this activity as suspicious.
+
+        Admin users can flag manually. Ingestion may also flag rows as a
+        system action, in which case flagged_by is None.
 
         Args:
             reasons (str or list): Flag reason code(s)
                 - str: Single flag (e.g., 'unknown_plant')
                 - list: Multiple flags (e.g., ['unknown_plant', 'negative_quantity'])
+            flagged_by (User): Admin user performing the flag action, or None for system flags
+            note (str): Optional audit log note
         """
+        if flagged_by is not None and not flagged_by.is_admin():
+            raise PermissionError("Only admins can flag activities")
+
         # Normalize to list
         if isinstance(reasons, str):
             reasons = [reasons]
@@ -128,32 +146,108 @@ class Activity(models.Model):
         else:
             self.flag_reason = '|'.join(sorted(reasons))
 
-        if self.status == 'PENDING':
-            self.status = 'FLAGGED'
-
+        self.status = 'FLAGGED'
         self.save()
 
-    def approve(self, user, note=''):
+        # Sync file counters
+        self.source_file.sync_counters()
+
+        # Create audit log
+        from apps.audit.models import AuditLog
+        AuditLog.objects.create(
+            activity=self,
+            source_file=self.source_file,
+            action='FLAGGED',
+            performed_by=flagged_by,
+            note=note or f"Flagged with reasons: {', '.join(reasons)}"
+        )
+
+    def approve_by_analyst(self, user, note=''):
         """
-        Approve this activity.
+        Analyst approval - moves to PENDING (waiting for admin).
 
         Args:
-            user (User): User performing the approval
+            user (User): Analyst user performing the approval
+            note (str): Optional note for audit log
+        """
+        if not user.is_analyst():
+            raise PermissionError("User must have analyst role")
+
+        self.status = 'PENDING'
+        self.save()
+
+        # Sync file counters
+        self.source_file.sync_counters()
+
+        # Create audit log
+        from apps.audit.models import AuditLog
+        audit_note = note or f"Reviewed and approved by analyst {user.username}"
+        AuditLog.objects.create(
+            activity=self,
+            source_file=self.source_file,
+            action='REVIEWED',
+            performed_by=user,
+            note=audit_note
+        )
+
+    def approve_by_admin(self, user, note=''):
+        """
+        Admin final approval - moves to APPROVED (final sign-off).
+
+        Args:
+            user (User): Admin user performing the approval
             note (str): Optional note for audit log
         """
         from django.utils import timezone
+
+        if not user.is_admin():
+            raise PermissionError("Only admins can give final approval")
+
         self.status = 'APPROVED'
         self.approved_by = user
         self.approved_at = timezone.now()
         self.save()
 
+        # Sync file counters
+        self.source_file.sync_counters()
+
         # Create audit log
         from apps.audit.models import AuditLog
-        audit_note = note or f"Approved by {user.username}"
+        audit_note = note or f"Final approval by admin {user.username}"
         AuditLog.objects.create(
             activity=self,
             source_file=self.source_file,
             action='APPROVED',
+            performed_by=user,
+            note=audit_note
+        )
+
+    def unflag(self, user, note=''):
+        """
+        Remove flag from activity. Only admins can unflag.
+
+        Args:
+            user (User): Admin user performing the unflag action
+            note (str): Optional note for audit log
+        """
+        if not user.is_admin():
+            raise PermissionError("Only admins can unflag activities")
+
+        self.is_suspicious = False
+        self.flag_reason = None
+        self.status = 'FLAGGED'  # Keep in review queue for re-review
+        self.save()
+
+        # Sync file counters
+        self.source_file.sync_counters()
+
+        # Create audit log
+        from apps.audit.models import AuditLog
+        audit_note = note or f"Unflagged by admin {user.username}"
+        AuditLog.objects.create(
+            activity=self,
+            source_file=self.source_file,
+            action='REVIEWED',
             performed_by=user,
             note=audit_note
         )

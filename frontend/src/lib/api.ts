@@ -68,6 +68,7 @@ export interface SourceFile {
   total_rows: number | null;
   failed_rows: number | null;
   flagged_rows: number | null;
+  pending_rows: number | null;
   approved_rows: number | null;
 }
 
@@ -87,7 +88,13 @@ export const activitiesApi = {
     api.get<Activity>(`/activities/${id}/`),
 
   approve: (id: number, note?: string) =>
-    api.post<Activity>(`/activities/${id}/approve/`, { note }),
+    api.post<{ message: string; activity: Activity }>(`/activities/${id}/approve/`, { note }),
+
+  flag: (id: number, reason: string, note?: string) =>
+    api.post<Activity>(`/activities/${id}/flag/`, { reason, note }),
+
+  unflag: (id: number, note?: string) =>
+    api.post<Activity>(`/activities/${id}/unflag/`, { note }),
 };
 
 export interface FileActivity {

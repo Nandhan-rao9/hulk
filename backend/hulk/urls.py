@@ -9,7 +9,7 @@ from rest_framework.routers import DefaultRouter
 from apps.activities.views import ActivityViewSet
 from apps.ingestion.views import SourceFileViewSet
 from apps.core.views import (
-    LoginView, LogoutView, CurrentUserView,
+    CSRFTokenView, LoginView, LogoutView, CurrentUserView,
     PlantLookupUploadView, MaterialMappingUploadView
 )
 
@@ -24,6 +24,7 @@ urlpatterns = [
     path('api-auth/', include('rest_framework.urls')),  # DRF browsable API login
 
     # Auth endpoints
+    path('api/auth/csrf/', CSRFTokenView.as_view(), name='auth-csrf'),
     path('api/auth/login/', LoginView.as_view(), name='auth-login'),
     path('api/auth/logout/', LogoutView.as_view(), name='auth-logout'),
     path('api/auth/me/', CurrentUserView.as_view(), name='auth-me'),

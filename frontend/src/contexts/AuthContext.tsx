@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import axios from 'axios';
+import api from '../lib/api';
 
 interface User {
   id: number;
@@ -37,9 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/auth/me/', {
-        withCredentials: true,
-      });
+      const response = await api.get('/auth/me/');
       setUser(response.data);
     } catch (error) {
       setUser(null);
@@ -49,19 +47,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (username: string, password: string) => {
-    const response = await axios.post(
-      'http://localhost:8000/api/auth/login/',
-      { username, password },
-      { withCredentials: true }
-    );
+    // Fetch CSRF token first (sets csrftoken cookie)
+    await api.get('/auth/csrf/');
+
+    // Then login (api interceptor adds X-CSRFToken header automatically)
+    const response = await api.post('/auth/login/', { username, password });
     setUser(response.data.user);
   };
 
   const logout = async () => {
     try {
-      await axios.post('http://localhost:8000/api/auth/logout/', {}, {
-        withCredentials: true,
-      });
+      await api.post('/auth/logout/');
     } catch (error) {
       console.error('Logout error:', error);
     }

@@ -61,15 +61,27 @@ export default function Upload() {
       setFile(null);
     } catch (err: any) {
       const d = err.response?.data;
-      const errorMessage =
-        d?.detail ||
-        d?.non_field_errors?.[0] ||
-        d?.file?.[0] ||
-        (typeof d === 'string' ? d : null) ||
-        err.message ||
-        'Upload failed';
-      setError(errorMessage);
       console.error('Upload error:', d); // Log full error for debugging
+
+      // Try to extract meaningful error message
+      let errorMessage = 'Upload failed';
+
+      if (typeof d === 'string') {
+        errorMessage = d;
+      } else if (d?.detail) {
+        errorMessage = d.detail;
+      } else if (d?.non_field_errors) {
+        errorMessage = Array.isArray(d.non_field_errors) ? d.non_field_errors.join(', ') : d.non_field_errors;
+      } else if (d?.file) {
+        errorMessage = Array.isArray(d.file) ? d.file.join(', ') : d.file;
+      } else if (d) {
+        // Try to show all errors
+        errorMessage = JSON.stringify(d, null, 2);
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
     } finally {
       setUploading(false);
     }
