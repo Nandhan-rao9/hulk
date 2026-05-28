@@ -31,10 +31,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="container flex h-16 items-center px-4 mx-auto max-w-7xl">
           <div className="flex items-center space-x-2 mr-8">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">B</span>
+              <span className="text-white font-bold text-sm">H</span>
             </div>
             <span className="text-xl font-semibold bg-gradient-to-r from-brand-600 to-brand-500 bg-clip-text text-transparent">
-              Breathe ESG
+              HULK
             </span>
           </div>
 

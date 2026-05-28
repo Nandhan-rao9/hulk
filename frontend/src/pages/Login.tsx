@@ -34,10 +34,10 @@ export default function Login() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex h-16 w-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 items-center justify-center mb-4 shadow-lg">
-            <span className="text-white font-bold text-2xl">B</span>
+            <span className="text-white font-bold text-2xl">H</span>
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-brand-600 to-brand-500 bg-clip-text text-transparent">
-            Breathe ESG
+            HULK
           </h1>
           <p className="text-muted-foreground mt-2">
             Emissions Data Management Platform
