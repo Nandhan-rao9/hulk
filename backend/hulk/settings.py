@@ -184,3 +184,5 @@ SESSION_COOKIE_SECURE = True  # Required when SameSite=None and using HTTPS
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False  # Must be False so JavaScript can read it
+CSRF_USE_SESSIONS = False  # Store CSRF token in cookie, not session
+CSRF_COOKIE_DOMAIN = None  # Allow cookie on exact domain only
