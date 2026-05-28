@@ -225,33 +225,37 @@ class IngestionService:
                 **result.detail_data
             )
 
-            # Apply suspicious flags (single save for all flags)
-            if result.suspicious_flags:
+            # Calculate emissions immediately after detail creation
+            calculation_success = activity.calculate_emissions()
+
+            # Collect all flags: parser flags + calculation failure
+            all_flags = result.suspicious_flags.copy()
+            if not calculation_success:
+                all_flags.append('emissions_calculation_failed')
+
+            # Apply flags if any issues detected
+            if all_flags:
                 activity.flag(
-                    result.suspicious_flags,
+                    all_flags,
                     flagged_by=None,  # System action
-                    note=f"Flagged during ingestion: {', '.join(result.suspicious_flags)}"
+                    note=f"Flagged during ingestion: {', '.join(all_flags)}"
                 )
                 stats['flagged'] += 1
             else:
-                # Auto-approve clean rows
+                # Auto-approve only if clean AND emissions calculated successfully
                 activity.status = 'APPROVED'
                 activity.save()
                 stats['approved'] += 1
 
-                # Log auto-approval
-                AuditLog.objects.create(
-                    activity=activity,
-                    source_file=source_file,
+                # Log auto-approval (use activity helper method)
+                activity.create_audit_log(
                     action='APPROVED',
                     performed_by=None,  # System action
-                    note='Auto-approved (no flags detected)'
+                    note='Auto-approved (no flags detected, emissions calculated)'
                 )
 
-            # Audit log for ingestion
-            AuditLog.objects.create(
-                activity=activity,
-                source_file=source_file,
+            # Audit log for ingestion (use activity helper method)
+            activity.create_audit_log(
                 action='INGESTED',
                 performed_by=self.user,
                 note=f"Ingested from {source_file.original_filename} row {row_num}"

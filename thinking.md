@@ -159,3 +159,9 @@ wired everything up - tdl
 - emission calc implementation
 - 
 ---
+
+
+We know RawRecord SHOULD be immutable, but we're not enforcing it 
+at the database level because that's annoying during development. 
+Instead, we're relying on audit snapshots to preserve history if 
+something gets deleted. Good enough for now

@@ -244,7 +244,7 @@ class SourceFileViewSet(viewsets.ModelViewSet):
                 'category': activity.category,
                 'period_end': activity.period_end,
                 'facility_name': activity.facility.name if activity.facility else None,
-                'emissions_kgco2e': 0,  # Placeholder - calculation pending
+                'emissions_kgco2e': float(activity.emissions_kgco2e) if activity.emissions_kgco2e else 0,
             }
 
             # Add source-specific metrics
@@ -278,6 +278,9 @@ class SourceFileViewSet(viewsets.ModelViewSet):
                     data['metric_unit'] = 'INR'
                 data['mode'] = detail.mode
                 data['employee_id'] = detail.employee_id
+                data['cabin_class'] = detail.cabin_class
+                data['distance_km'] = float(detail.distance_km) if detail.distance_km else None
+                data['nights'] = detail.nights
 
             results.append(data)
 

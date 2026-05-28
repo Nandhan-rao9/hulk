@@ -191,7 +191,6 @@ export default function FileDetail() {
                 <tr className="border-b text-left text-sm text-muted-foreground">
                   <th className="pb-3 font-medium w-8"></th>
                   <th className="pb-3 font-medium">Date</th>
-                  <th className="pb-3 font-medium">Scope</th>
                   <th className="pb-3 font-medium">Category</th>
                   <th className="pb-3 font-medium">Facility/Detail</th>
                   <th className="pb-3 font-medium text-right">Metric</th>
@@ -202,7 +201,7 @@ export default function FileDetail() {
               <tbody className="divide-y">
                 {data.activities.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12">
+                    <td colSpan={7} className="py-12">
                       <div className="text-center">
                         <div className="flex items-center justify-center mb-4">
                           <AlertCircle className="h-12 w-12 text-muted-foreground" />
@@ -236,11 +235,6 @@ export default function FileDetail() {
                         </td>
                         <td className="py-3 text-sm">
                           {formatDate(activity.period_end)}
-                        </td>
-                        <td className="py-3">
-                          <span className={`text-sm font-medium ${getScopeColor(activity.scope)}`}>
-                            Scope {activity.scope}
-                          </span>
                         </td>
                         <td className="py-3">
                           <Badge variant="default" size="sm">
@@ -278,7 +272,7 @@ export default function FileDetail() {
                       {/* Expanded Detail Row */}
                       {expandedRow === activity.id && (
                         <tr className="bg-muted/30">
-                          <td colSpan={8} className="px-4 py-4">
+                          <td colSpan={7} className="px-4 py-4">
                             <div className="space-y-3">
                               <div className="text-sm font-medium text-muted-foreground mb-2">
                                 Activity Details
@@ -310,6 +304,24 @@ export default function FileDetail() {
                                   <div>
                                     <span className="text-muted-foreground">Travel Mode:</span>{' '}
                                     <span className="font-medium">{activity.mode}</span>
+                                  </div>
+                                )}
+                                {activity.cabin_class && (
+                                  <div>
+                                    <span className="text-muted-foreground">Cabin Class:</span>{' '}
+                                    <Badge size="sm" variant="outline">{activity.cabin_class}</Badge>
+                                  </div>
+                                )}
+                                {activity.distance_km && (
+                                  <div>
+                                    <span className="text-muted-foreground">Distance:</span>{' '}
+                                    <span className="font-medium">{formatNumber(activity.distance_km)} km</span>
+                                  </div>
+                                )}
+                                {activity.nights && (
+                                  <div>
+                                    <span className="text-muted-foreground">Nights:</span>{' '}
+                                    <span className="font-medium">{activity.nights}</span>
                                   </div>
                                 )}
                                 <div>

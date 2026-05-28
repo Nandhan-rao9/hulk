@@ -111,6 +111,9 @@ export interface FileActivity {
   service_number?: string;
   mode?: string;
   employee_id?: string;
+  cabin_class?: string;
+  distance_km?: number;
+  nights?: number;
 }
 
 export interface FileActivitiesResponse {
@@ -168,7 +171,7 @@ export const sourceFilesApi = {
     formData.append('source_type', sourceType);
     return api.post<SourceFile>('/source-files/upload/', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': undefined,  // Let Axios auto-detect FormData and set boundary
       },
     });
   },
@@ -181,7 +184,7 @@ export const lookupsApi = {
     formData.append('file', file);
     return api.post<LookupUploadResponse>('/lookups/plant/upload/', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': undefined,
       },
     });
   },
@@ -191,7 +194,7 @@ export const lookupsApi = {
     formData.append('file', file);
     return api.post<LookupUploadResponse>('/lookups/material-mapping/upload/', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': undefined,
       },
     });
   },

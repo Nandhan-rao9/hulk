@@ -30,6 +30,11 @@ class AuditLog(models.Model):
         blank=True,
         help_text="Null if activity deleted - log persists"
     )
+    activity_snapshot = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Snapshot of activity state at time of action (category, scope, period, facility). Preserved if activity deleted."
+    )
     source_file = models.ForeignKey(
         'ingestion.SourceFile',
         on_delete=models.SET_NULL,
@@ -37,6 +42,12 @@ class AuditLog(models.Model):
         null=True,
         blank=True,
         help_text="Null if source file deleted - log persists"
+    )
+    source_file_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Source file name snapshot. Preserved if file deleted."
     )
     action = models.CharField(max_length=30, choices=ACTION_CHOICES)
     performed_by = models.ForeignKey(

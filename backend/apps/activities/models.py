@@ -45,6 +45,7 @@ class Activity(models.Model):
         ('duplicate_suspected', 'Suspected Duplicate'),
         ('missing_documentation', 'Missing Documentation'),
         ('unusual_quantity', 'Unusual Quantity'),
+        ('emissions_calculation_failed', 'Emissions Calculation Failed'),
         ('other', 'Other'),
     ]
 
@@ -79,7 +80,7 @@ class Activity(models.Model):
         decimal_places=3,
         null=True,
         blank=True,
-        help_text="Calculated emissions in kgCO2e"
+        help_text="Calculated emissions in kgCO2e. NULL = not yet calculated. Calculation done post-ingestion via management command or background task."
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='FLAGGED')
     is_suspicious = models.BooleanField(default=False)
@@ -114,6 +115,183 @@ class Activity(models.Model):
 
     def __str__(self):
         return f"{self.get_category_display()} - {self.period_end} ({self.get_status_display()})"
+
+    def calculate_emissions(self):
+        """
+        Calculate emissions_kgco2e based on source type and emission factors.
+
+        Returns:
+            bool: True if successful (numeric value computed), False if failed (None result)
+        """
+        from apps.core.models import EmissionFactor
+        from decimal import Decimal
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            if hasattr(self, 'sap_detail'):
+                self.emissions_kgco2e = self._calculate_sap_emissions()
+            elif hasattr(self, 'utility_detail'):
+                self.emissions_kgco2e = self._calculate_utility_emissions()
+            elif hasattr(self, 'travel_detail'):
+                self.emissions_kgco2e = self._calculate_travel_emissions()
+            else:
+                logger.warning(f"Activity {self.id} has no detail record, cannot calculate emissions")
+                return False
+
+            self.save(update_fields=['emissions_kgco2e'])
+
+            # Return True only if we actually calculated a numeric value
+            if self.emissions_kgco2e is not None:
+                return True
+            else:
+                logger.warning(f"Activity {self.id}: Calculation returned None (factor missing or unit mismatch)")
+                return False
+
+        except EmissionFactor.DoesNotExist as e:
+            logger.warning(f"Activity {self.id}: Missing emission factor - {e}")
+            self.emissions_kgco2e = None
+            return False
+        except Exception as e:
+            logger.error(f"Activity {self.id}: Emissions calculation failed - {e}")
+            self.emissions_kgco2e = None
+            return False
+
+    def _calculate_sap_emissions(self):
+        """Calculate emissions for SAP fuel/procurement data."""
+        from apps.core.models import EmissionFactor
+        from decimal import Decimal
+
+        detail = self.sap_detail
+
+        # Get emission factor for this fuel type
+        try:
+            factor = EmissionFactor.objects.get(fuel_type=self.category)
+        except EmissionFactor.DoesNotExist:
+            # Log and return None for unclassified/unknown fuels
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Activity {self.id}: No emission factor for category '{self.category}'"
+            )
+            return None
+
+        # Check unit compatibility
+        if factor.unit != detail.unit_normalized:
+            # Flag unit mismatch instead of breaking
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Activity {self.id}: Unit mismatch - factor expects {factor.unit}, got {detail.unit_normalized}"
+            )
+
+            # Add flag if not already present
+            flags = self.flag_reason.split('|') if self.flag_reason else []
+            if 'unit_mismatch' not in flags:
+                flags.append('unit_mismatch')
+                self.flag_reason = '|'.join(flags)
+                self.is_suspicious = True
+                self.status = 'FLAGGED'
+                self.save(update_fields=['flag_reason', 'is_suspicious', 'status'])
+                self.source_file.sync_counters()
+
+            return None
+
+        # Calculate: quantity × emission factor
+        emissions = detail.quantity_normalized * factor.factor_kgco2e
+        return emissions
+
+    def _calculate_utility_emissions(self):
+        """Calculate emissions for utility electricity data."""
+        from decimal import Decimal
+
+        detail = self.utility_detail
+
+        # Simple case - grid emission factor already stored in detail record
+        emissions = detail.kwh_consumed * detail.grid_emission_factor
+        return emissions
+
+    def _calculate_travel_emissions(self):
+        """Calculate emissions for travel data (flights, hotels, ground transport)."""
+        from apps.core.models import EmissionFactor
+        from decimal import Decimal
+        import logging
+
+        logger = logging.getLogger(__name__)
+        detail = self.travel_detail
+
+        # Flight: distance × cabin class factor
+        if detail.mode == 'AIR' and detail.distance_km:
+            cabin_map = {
+                'ECONOMY': 'FLIGHT_ECONOMY',
+                'PREMIUM': 'FLIGHT_PREMIUM',
+                'BUSINESS': 'FLIGHT_BUSINESS',
+                'FIRST': 'FLIGHT_FIRST',
+            }
+
+            fuel_type = cabin_map.get(detail.cabin_class, 'FLIGHT_ECONOMY')  # Default to economy
+            try:
+                factor = EmissionFactor.objects.get(fuel_type=fuel_type)
+                emissions = detail.distance_km * factor.factor_kgco2e
+                return emissions
+            except EmissionFactor.DoesNotExist:
+                logger.warning(f"Activity {self.id}: Missing flight emission factor for {fuel_type}")
+                return None
+
+        # Hotel: nights × hotel factor
+        elif detail.mode == 'HOTEL' and detail.nights:
+            try:
+                factor = EmissionFactor.objects.get(fuel_type='HOTEL')
+                emissions = Decimal(str(detail.nights)) * factor.factor_kgco2e
+                return emissions
+            except EmissionFactor.DoesNotExist:
+                logger.warning(f"Activity {self.id}: Missing hotel emission factor")
+                return None
+
+        # Ground transport (CAR, RAIL): spend-based fallback
+        else:
+            if not detail.amount_inr:
+                logger.warning(f"Activity {self.id}: No amount_inr for spend-based calculation")
+                return None
+
+            try:
+                factor = EmissionFactor.objects.get(fuel_type='CAR')  # Use CAR for all ground transport
+                emissions = detail.amount_inr * factor.factor_kgco2e
+                return emissions
+            except EmissionFactor.DoesNotExist:
+                logger.warning(f"Activity {self.id}: Missing CAR emission factor for spend-based calculation")
+                return None
+
+    def create_audit_log(self, action, performed_by=None, note='', **kwargs):
+        """
+        Helper to create audit log with snapshot.
+
+        Args:
+            action (str): Action type from AuditLog.ACTION_CHOICES
+            performed_by (User|None): User performing action, None for system
+            note (str): Optional note
+            **kwargs: Additional AuditLog fields
+
+        Returns:
+            AuditLog instance
+        """
+        from apps.audit.models import AuditLog
+
+        return AuditLog.objects.create(
+            activity=self,
+            activity_snapshot={
+                'id': self.id,
+                'category': self.category,
+                'scope': self.scope,
+                'period_end': self.period_end.isoformat(),
+                'facility_name': self.facility.name if self.facility else None,
+            },
+            source_file=self.source_file,
+            source_file_name=self.source_file.original_filename,
+            action=action,
+            performed_by=performed_by,
+            note=note,
+            **kwargs
+        )
 
     def flag(self, reasons, flagged_by=None, note=''):
         """
@@ -153,10 +331,7 @@ class Activity(models.Model):
         self.source_file.sync_counters()
 
         # Create audit log
-        from apps.audit.models import AuditLog
-        AuditLog.objects.create(
-            activity=self,
-            source_file=self.source_file,
+        self.create_audit_log(
             action='FLAGGED',
             performed_by=flagged_by,
             note=note or f"Flagged with reasons: {', '.join(reasons)}"
@@ -169,9 +344,17 @@ class Activity(models.Model):
         Args:
             user (User): Analyst user performing the approval
             note (str): Optional note for audit log
+
+        Raises:
+            PermissionError: If user not analyst or period locked
         """
         if not user.is_analyst():
             raise PermissionError("User must have analyst role")
+
+        # Check period lock
+        from apps.core.utils import is_period_locked
+        if is_period_locked(self.org, self.period_end):
+            raise PermissionError(f"Period {self.period_end.strftime('%B %Y')} is locked")
 
         self.status = 'PENDING'
         self.save()
@@ -180,11 +363,8 @@ class Activity(models.Model):
         self.source_file.sync_counters()
 
         # Create audit log
-        from apps.audit.models import AuditLog
         audit_note = note or f"Reviewed and approved by analyst {user.username}"
-        AuditLog.objects.create(
-            activity=self,
-            source_file=self.source_file,
+        self.create_audit_log(
             action='REVIEWED',
             performed_by=user,
             note=audit_note
@@ -197,11 +377,19 @@ class Activity(models.Model):
         Args:
             user (User): Admin user performing the approval
             note (str): Optional note for audit log
+
+        Raises:
+            PermissionError: If user not admin or period locked
         """
         from django.utils import timezone
 
         if not user.is_admin():
             raise PermissionError("Only admins can give final approval")
+
+        # Check period lock
+        from apps.core.utils import is_period_locked
+        if is_period_locked(self.org, self.period_end):
+            raise PermissionError(f"Period {self.period_end.strftime('%B %Y')} is locked")
 
         self.status = 'APPROVED'
         self.approved_by = user
@@ -212,11 +400,8 @@ class Activity(models.Model):
         self.source_file.sync_counters()
 
         # Create audit log
-        from apps.audit.models import AuditLog
         audit_note = note or f"Final approval by admin {user.username}"
-        AuditLog.objects.create(
-            activity=self,
-            source_file=self.source_file,
+        self.create_audit_log(
             action='APPROVED',
             performed_by=user,
             note=audit_note
@@ -229,9 +414,17 @@ class Activity(models.Model):
         Args:
             user (User): Admin user performing the unflag action
             note (str): Optional note for audit log
+
+        Raises:
+            PermissionError: If user not admin or period locked
         """
         if not user.is_admin():
             raise PermissionError("Only admins can unflag activities")
+
+        # Check period lock
+        from apps.core.utils import is_period_locked
+        if is_period_locked(self.org, self.period_end):
+            raise PermissionError(f"Period {self.period_end.strftime('%B %Y')} is locked")
 
         self.is_suspicious = False
         self.flag_reason = None
@@ -242,11 +435,8 @@ class Activity(models.Model):
         self.source_file.sync_counters()
 
         # Create audit log
-        from apps.audit.models import AuditLog
         audit_note = note or f"Unflagged by admin {user.username}"
-        AuditLog.objects.create(
-            activity=self,
-            source_file=self.source_file,
+        self.create_audit_log(
             action='REVIEWED',
             performed_by=user,
             note=audit_note
@@ -271,7 +461,7 @@ class SAPDetail(models.Model):
         primary_key=True,
         related_name='sap_detail'
     )
-    plant_code = models.CharField(max_length=10, help_text="SAP WERKS")
+    plant_code = models.CharField(max_length=50, help_text="SAP WERKS")
     material_number = models.CharField(max_length=50, help_text="SAP MATNR")
     material_desc = models.CharField(max_length=255, help_text="SAP MAKTX")
     material_group = models.CharField(
@@ -281,13 +471,13 @@ class SAPDetail(models.Model):
         help_text="SAP MATKL - PRIMARY classification signal"
     )
     quantity_raw = models.DecimalField(max_digits=15, decimal_places=3, help_text="Original value")
-    unit_raw = models.CharField(max_length=10, help_text="Original MEINS")
+    unit_raw = models.CharField(max_length=20, help_text="Original MEINS")
     quantity_normalized = models.DecimalField(
         max_digits=15,
         decimal_places=3,
         help_text="Converted to canonical unit"
     )
-    unit_normalized = models.CharField(max_length=10, help_text="L, M3, KG, KWH, etc.")
+    unit_normalized = models.CharField(max_length=20, help_text="L, M3, KG, KWH, etc.")
     conversion_factor = models.DecimalField(
         max_digits=10,
         decimal_places=6,
@@ -300,7 +490,7 @@ class SAPDetail(models.Model):
         blank=True,
         help_text="e.g., 'GAL→L: 3.785411'"
     )
-    movement_type = models.CharField(max_length=10, help_text="SAP BWART, e.g., '101'")
+    movement_type = models.CharField(max_length=20, help_text="SAP BWART, e.g., '101'")
     vendor_number = models.CharField(max_length=50, null=True, blank=True, help_text="SAP LIFNR")
     po_number = models.CharField(max_length=50, null=True, blank=True, help_text="SAP EBELN")
     classification_method = models.CharField(
