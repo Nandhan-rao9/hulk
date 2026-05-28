@@ -1,13 +1,23 @@
 from django.contrib.auth import authenticate, login, logout
 from django.middleware.csrf import get_token
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.utils.decorators import method_decorator
+from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from .serializers import UserSerializer, PlantLookupUploadSerializer, MaterialMappingUploadSerializer
+
+
+@csrf_exempt
+def health_check(request):
+    """
+    Unauthenticated health check endpoint for Railway.
+    Returns 200 OK regardless of ALLOWED_HOSTS.
+    """
+    return JsonResponse({'status': 'healthy'}, status=200)
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')

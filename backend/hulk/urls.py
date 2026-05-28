@@ -9,7 +9,7 @@ from rest_framework.routers import DefaultRouter
 from apps.activities.views import ActivityViewSet
 from apps.ingestion.views import SourceFileViewSet
 from apps.core.views import (
-    CSRFTokenView, LoginView, LogoutView, CurrentUserView,
+    health_check, CSRFTokenView, LoginView, LogoutView, CurrentUserView,
     PlantLookupUploadView, MaterialMappingUploadView
 )
 
@@ -20,6 +20,7 @@ router.register(r'source-files', SourceFileViewSet, basename='sourcefile')
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("health/", health_check, name='health-check'),  # Railway healthcheck
     path("api/", include(router.urls)),
     path('api-auth/', include('rest_framework.urls')),  # DRF browsable API login
 
