@@ -1,4 +1,4 @@
-# SOURCES.md - Real-World Data Source Research
+# SOURCES.md
 
 This document details the real-world formats I researched, what I learned, how my sample data reflects reality, and what would break in production.
 
