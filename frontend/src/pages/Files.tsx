@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react';
-import { FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, CheckCircle, XCircle, Clock, ChevronRight, Trash2, Eye, ListChecks } from 'lucide-react';
 import { Card } from '../components/Card';
 import Badge from '../components/Badge';
+import Button from '../components/Button';
 import { sourceFilesApi, type SourceFile } from '../lib/api';
 import { formatDate } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Files() {
+  const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [files, setFiles] = useState<SourceFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchFiles();
@@ -22,6 +28,24 @@ export default function Files() {
       console.error('Failed to fetch files:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (fileId: number, fileName: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+
+    if (!confirm(`Delete file "${fileName}"?\n\nThis will permanently delete:\n- The source file\n- All ${files.find(f => f.id === fileId)?.total_rows || 0} activities\n- All raw records\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingId(fileId);
+    try {
+      await sourceFilesApi.delete(fileId);
+      fetchFiles(); // Refresh list
+    } catch (error: any) {
+      alert(`Failed to delete file: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -72,10 +96,17 @@ export default function Files() {
           </Card>
         ) : (
           files.map((file) => (
-            <Card key={file.id} hover>
+            <Card
+              key={file.id}
+              hover
+              className="transition-all hover:shadow-lg"
+            >
               <div className="p-6">
                 <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4 flex-1">
+                  <div
+                    className="flex items-start space-x-4 flex-1 cursor-pointer"
+                    onClick={() => navigate(`/files/${file.id}`)}
+                  >
                     <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                       {getStatusIcon(file.status)}
                     </div>
@@ -95,26 +126,72 @@ export default function Files() {
                       </div>
                     </div>
                   </div>
-                  {file.status === 'DONE' && (
-                    <div className="flex items-center space-x-6 ml-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-semibold">{file.total_rows}</div>
-                        <div className="text-xs text-muted-foreground">Total</div>
-                      </div>
-                      {file.failed_rows! > 0 && (
+                  <div className="flex items-center space-x-4 ml-6">
+                    {file.status === 'DONE' && (
+                      <>
                         <div className="text-center">
-                          <div className="text-2xl font-semibold text-destructive">{file.failed_rows}</div>
-                          <div className="text-xs text-muted-foreground">Failed</div>
+                          <div className="text-2xl font-semibold">{file.total_rows}</div>
+                          <div className="text-xs text-muted-foreground">Total</div>
                         </div>
-                      )}
-                      {file.flagged_rows! > 0 && (
-                        <div className="text-center">
-                          <div className="text-2xl font-semibold text-yellow-600">{file.flagged_rows}</div>
-                          <div className="text-xs text-muted-foreground">Flagged</div>
-                        </div>
+                        {file.approved_rows! > 0 && (
+                          <div className="text-center">
+                            <div className="text-2xl font-semibold text-brand-600">{file.approved_rows}</div>
+                            <div className="text-xs text-muted-foreground">Approved</div>
+                          </div>
+                        )}
+                        {file.failed_rows! > 0 && (
+                          <div className="text-center">
+                            <div className="text-2xl font-semibold text-destructive">{file.failed_rows}</div>
+                            <div className="text-xs text-muted-foreground">Failed</div>
+                          </div>
+                        )}
+                        {file.flagged_rows! > 0 && (
+                          <div className="text-center">
+                            <div className="text-2xl font-semibold text-yellow-600">{file.flagged_rows}</div>
+                            <div className="text-xs text-muted-foreground">Flagged</div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/files/${file.id}`);
+                        }}
+                        className="gap-1"
+                      >
+                        <Eye className="h-3 w-3" />
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/review', { state: { sourceFileId: file.id } });
+                        }}
+                        className="gap-1"
+                      >
+                        <ListChecks className="h-3 w-3" />
+                        Review
+                      </Button>
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => handleDelete(file.id, file.original_filename, e)}
+                          disabled={deletingId === file.id}
+                          className="gap-1 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          {deletingId === file.id ? 'Deleting...' : 'Delete'}
+                        </Button>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </Card>

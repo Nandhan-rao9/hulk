@@ -182,6 +182,29 @@ class EmissionFactor(models.Model):
         return f"{self.fuel_type}: {self.factor_kgco2e} kgCO2e/{self.unit}"
 
 
+class CurrencyConversionRate(models.Model):
+    """
+    Currency conversion rates to INR for travel expense data.
+    Updated periodically (monthly/quarterly).
+    """
+    currency_code = models.CharField(max_length=10, unique=True, help_text="ISO currency code (USD, EUR, GBP, etc.)")
+    rate_to_inr = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        help_text="Conversion rate: 1 CURRENCY = X INR"
+    )
+    effective_date = models.DateField(help_text="Date when this rate became effective")
+    source = models.CharField(max_length=100, default="RBI", help_text="Source of conversion rate")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'currency_conversion_rates'
+        ordering = ['-effective_date', 'currency_code']
+
+    def __str__(self):
+        return f"1 {self.currency_code} = {self.rate_to_inr} INR (as of {self.effective_date})"
+
+
 class ReportingPeriodLock(models.Model):
     """
     Tracks which reporting periods (months) are locked per organization.

@@ -34,6 +34,7 @@ class SourceFile(models.Model):
     total_rows = models.IntegerField(null=True, blank=True)
     failed_rows = models.IntegerField(null=True, blank=True, default=0)
     flagged_rows = models.IntegerField(null=True, blank=True, default=0)
+    approved_rows = models.IntegerField(null=True, blank=True, default=0)
 
     class Meta:
         db_table = 'source_files'

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
     Organization, User, Facility, PlantLookup,
-    ClientMaterialGroupMapping, EmissionFactor, ReportingPeriodLock
+    ClientMaterialGroupMapping, EmissionFactor, CurrencyConversionRate, ReportingPeriodLock
 )
 
 
@@ -51,6 +51,14 @@ class EmissionFactorAdmin(admin.ModelAdmin):
     list_display = ['fuel_type', 'factor_kgco2e', 'unit', 'source', 'year']
     list_filter = ['source', 'year']
     search_fields = ['fuel_type']
+
+
+@admin.register(CurrencyConversionRate)
+class CurrencyConversionRateAdmin(admin.ModelAdmin):
+    list_display = ['currency_code', 'rate_to_inr', 'effective_date', 'source', 'updated_at']
+    list_filter = ['source', 'effective_date']
+    search_fields = ['currency_code']
+    ordering = ['-effective_date', 'currency_code']
 
 
 @admin.register(ReportingPeriodLock)

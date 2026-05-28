@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Upload as UploadIcon, FileUp, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/Card';
 import Button from '../components/Button';
@@ -59,11 +60,16 @@ export default function Upload() {
       setResult(response.data);
       setFile(null);
     } catch (err: any) {
-      const errorMessage = err.response?.data?.non_field_errors?.[0] ||
-                          err.response?.data?.file?.[0] ||
-                          err.message ||
-                          'Upload failed';
+      const d = err.response?.data;
+      const errorMessage =
+        d?.detail ||
+        d?.non_field_errors?.[0] ||
+        d?.file?.[0] ||
+        (typeof d === 'string' ? d : null) ||
+        err.message ||
+        'Upload failed';
       setError(errorMessage);
+      console.error('Upload error:', d); // Log full error for debugging
     } finally {
       setUploading(false);
     }
@@ -189,11 +195,15 @@ export default function Upload() {
               <Badge variant="success">{result.status}</Badge>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-6 p-4 bg-muted/50 rounded-lg">
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-4 gap-6 p-4 bg-muted/50 rounded-lg">
               <div>
                 <div className="text-sm text-muted-foreground mb-1">Total Rows</div>
                 <div className="text-2xl font-semibold">{result.total_rows}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground mb-1">Auto-Approved</div>
+                <div className="text-2xl font-semibold text-brand-600">{result.approved_rows}</div>
               </div>
               <div>
                 <div className="text-sm text-muted-foreground mb-1">Failed Rows</div>
@@ -202,6 +212,38 @@ export default function Upload() {
               <div>
                 <div className="text-sm text-muted-foreground mb-1">Flagged Rows</div>
                 <div className="text-2xl font-semibold text-yellow-600">{result.flagged_rows}</div>
+              </div>
+            </div>
+
+            {/* Next Steps Guide */}
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                    📋 Next Steps
+                  </div>
+                  <div className="text-sm text-blue-800 dark:text-blue-200 space-y-2">
+                    <p>
+                      <strong>{result.approved_rows || 0} activities</strong> were automatically approved (no flags detected).
+                    </p>
+                    {result.flagged_rows! > 0 && (
+                      <p>
+                        <strong>{result.flagged_rows} flagged activities</strong> require review.
+                      </p>
+                    )}
+                    {result.flagged_rows! > 0 && (
+                      <p className="font-medium">
+                        → Go to <Link to="/review" className="text-brand-600 underline hover:text-brand-700">Review Queue</Link> to review flagged activities
+                      </p>
+                    )}
+                    {result.flagged_rows === 0 && (
+                      <p className="font-medium">
+                        → View activities in <Link to={`/files/${result.id}`} className="text-brand-600 underline hover:text-brand-700">File Details</Link>
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>

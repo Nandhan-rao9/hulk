@@ -42,9 +42,13 @@ class UtilityParser(BaseParser):
         'bill_amount': 'amount_inr',
         'amount': 'amount_inr',
         'tariff_category': 'tariff',
+        # Unit column (optional)
+        'uom': 'unit',
+        'unit_of_measure': 'unit',
     }
 
     REQUIRED_HEADERS = ['service_no', 'period_start', 'period_end', 'units_kwh', 'tariff', 'amount_inr']
+    OPTIONAL_HEADERS = ['unit']  # Unit of measure column
 
     # Gap detection threshold (days)
     GAP_THRESHOLD_DAYS = 35  # Normal billing cycle is 28-32 days
@@ -130,10 +134,19 @@ class UtilityParser(BaseParser):
             if amount_inr < 0:
                 result.add_flag('negative_amount')
 
-            # Step 4: Detect unit type (check for kVAh ambiguity)
-            unit_raw = 'kWh'  # Default
-            if 'kvah' in tariff.lower() or 'kvah' in units_str.lower():
+            # Step 4: Detect unit type
+            # Priority: 1) unit column, 2) infer from tariff/field name, 3) default kWh
+            unit_raw = 'kWh'  # Default assumption
+
+            # Check if CSV has explicit unit column
+            if 'unit' in normalized_row and normalized_row['unit'].strip():
+                unit_raw = normalized_row['unit'].strip()
+            # Else infer from tariff or units field (legacy behavior)
+            elif 'kvah' in tariff.lower() or 'kvah' in units_str.lower():
                 unit_raw = 'kVAh'
+
+            # Flag if unit is not kWh (ambiguous or needs conversion)
+            if unit_raw.upper() not in ['KWH', 'KWHR']:
                 result.add_flag('unit_ambiguous')
 
             # Step 5: Check for cross-month period
@@ -147,18 +160,18 @@ class UtilityParser(BaseParser):
             # Step 7: Check for overlaps in this service's timeline
             self._check_overlap(result, service_no, period_start, period_end, row_number)
 
-            # Step 8: Check for gaps (BEFORE adding to timeline)
-            # NOTE: Assumes CSV rows are sorted by date per service
-            # For unsorted data, would need post-processing pass
-            self._check_gap_inline(result, service_no, period_start, row_number)
-
-            # Step 9: Track timeline for gap/overlap detection
+            # Step 8: Track timeline for gap detection (checked after all rows parsed)
             self.service_timelines[service_no].append((period_start, period_end, row_number))
 
-            # Step 10: Get emission factor
+            # NOTE: Gap detection happens in finalize_parsing() after all rows processed
+            # This handles unsorted data correctly
+
+            # Step 10: Get emission factor (for reference, not calculation)
+            # NOTE: Emission calculation happens later in separate service layer
             emission_factor = self._get_emission_factor()
 
             # Step 11: Build Activity data
+            # NOTE: emissions_kgco2e field left NULL - calculated later
             result.activity_data = {
                 'facility': facility,
                 'scope': 2,  # Electricity is always Scope 2
@@ -167,6 +180,7 @@ class UtilityParser(BaseParser):
                 'period_end': period_end,
                 'is_cross_month': is_cross_month,
                 'status': 'PENDING',
+                # emissions_kgco2e: NULL - to be calculated later
             }
 
             # Step 12: Build UtilityDetail data
@@ -176,7 +190,7 @@ class UtilityParser(BaseParser):
                 'kwh_consumed': kwh_consumed,
                 'unit_raw': unit_raw,
                 'billing_amount_inr': amount_inr,
-                'grid_emission_factor': emission_factor,
+                'grid_emission_factor': emission_factor,  # Reference only
                 'emission_factor_source': 'CEA_2024',
             }
 
@@ -280,7 +294,10 @@ class UtilityParser(BaseParser):
 
     def _get_emission_factor(self) -> Decimal:
         """
-        Get CEA 2024 grid emission factor for India.
+        Get CEA 2024 grid emission factor for India (reference only).
+
+        NOTE: This is stored in UtilityDetail for reference/audit.
+        Actual emissions calculation happens in separate service layer.
 
         Returns:
             Emission factor in kgCO2e per kWh
@@ -324,33 +341,35 @@ class UtilityParser(BaseParser):
                 result.add_flag('overlap')
                 break  # Only flag once
 
-    def _check_gap_inline(self, result: ParseResult, service_no: str, current_start: date, row_number: int):
+    def finalize_parsing(self) -> Dict[int, List[str]]:
         """
-        Check for gaps inline during parsing (assumes sorted data).
+        Finalize parsing - check for gaps after all rows processed.
 
-        NOTE: This assumes CSV rows are sorted by date per service.
-        For unsorted data, gaps may be missed. Future improvement:
-        add post-processing pass that sorts timeline and flags gaps.
+        This method is called by the ingestion service after all rows are parsed.
+        It sorts the timeline per service and checks for gaps, handling unsorted data.
 
-        Args:
-            result: ParseResult to add flags to
-            service_no: Service number being checked
-            current_start: Start date of current period
-            row_number: Current row number
+        Returns:
+            Dict of {row_number: [flag_names]} to apply to activities
         """
-        previous_bills = self.service_timelines.get(service_no, [])
+        flags_to_apply = {}
 
-        if not previous_bills:
-            # First bill for this service
-            return
+        for service_no, bills_data in self.service_timelines.items():
+            # Sort bills by period_start to handle unsorted data
+            sorted_bills = sorted(bills_data, key=lambda x: x[0])
 
-        # Get most recent bill (assumes sorted, so last in list)
-        prev_start, prev_end, prev_row = previous_bills[-1]
+            # Check gaps between consecutive bills
+            for i in range(1, len(sorted_bills)):
+                prev_start, prev_end, prev_row = sorted_bills[i - 1]
+                curr_start, curr_end, curr_row = sorted_bills[i]
 
-        # Calculate gap from previous end to current start
-        gap_days = (current_start - prev_end).days
+                # Calculate gap from previous end to current start
+                gap_days = (curr_start - prev_end).days
 
-        # Flag if gap > threshold
-        if gap_days > self.GAP_THRESHOLD_DAYS:
-            result.add_flag('gap')
+                # Flag if gap > threshold
+                if gap_days > self.GAP_THRESHOLD_DAYS:
+                    if curr_row not in flags_to_apply:
+                        flags_to_apply[curr_row] = []
+                    flags_to_apply[curr_row].append('gap')
+
+        return flags_to_apply
 

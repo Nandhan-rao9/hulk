@@ -1,0 +1,16 @@
+.claude/*
+backend/.env
+*.env
+CONTEXT_TRANSFER.md
+backend/venv/
+__pycache__/
+*.pyc
+db.sqlite3
+
+frontend/node_modules/
+frontend/build/
+frontend/FRONTEND_SUMMARY.md
+IMPLEMENTATION_SUMMARY.md
+backend/API_ENDPOINTS.md
+backend/README.md
+backend/.env.example

@@ -140,3 +140,22 @@ gap in dates
 ---
 
 starting csv generation
+
+### features to implement - 
+1. multi - tenacy
+2. lookup tables
+3. workflow
+4. should work on Emision calculation - research on workflows
+5. flagging rules - done
+
+### out of scope -
+- iternary reconstruction - flight paths 
+    - resort to kms x class based calculation
+- hotels - star rating + spend
+- ground - spend based
+
+---
+wired everything up - tdl
+- emission calc implementation
+- 
+---

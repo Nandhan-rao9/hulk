@@ -105,33 +105,41 @@ class Activity(models.Model):
     def __str__(self):
         return f"{self.get_category_display()} - {self.period_end} ({self.get_status_display()})"
 
-    def flag(self, reason):
+    def flag(self, reasons):
         """
         Flag this activity as suspicious.
 
         Args:
-            reason (str): Flag reason code (e.g., 'unknown_plant')
+            reasons (str or list): Flag reason code(s)
+                - str: Single flag (e.g., 'unknown_plant')
+                - list: Multiple flags (e.g., ['unknown_plant', 'negative_quantity'])
         """
+        # Normalize to list
+        if isinstance(reasons, str):
+            reasons = [reasons]
+
         self.is_suspicious = True
+
+        # Merge with existing flags
         if self.flag_reason:
-            # Append to existing flags
             existing_flags = set(self.flag_reason.split('|'))
-            existing_flags.add(reason)
+            existing_flags.update(reasons)
             self.flag_reason = '|'.join(sorted(existing_flags))
         else:
-            self.flag_reason = reason
+            self.flag_reason = '|'.join(sorted(reasons))
 
         if self.status == 'PENDING':
             self.status = 'FLAGGED'
 
         self.save()
 
-    def approve(self, user):
+    def approve(self, user, note=''):
         """
         Approve this activity.
 
         Args:
             user (User): User performing the approval
+            note (str): Optional note for audit log
         """
         from django.utils import timezone
         self.status = 'APPROVED'
@@ -141,12 +149,13 @@ class Activity(models.Model):
 
         # Create audit log
         from apps.audit.models import AuditLog
+        audit_note = note or f"Approved by {user.username}"
         AuditLog.objects.create(
             activity=self,
             source_file=self.source_file,
             action='APPROVED',
             performed_by=user,
-            note=f"Approved by {user.username}"
+            note=audit_note
         )
 
 
@@ -303,7 +312,33 @@ class TravelDetail(models.Model):
     amount_inr = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        help_text="Converted, or same if already INR"
+        null=True,
+        blank=True,
+        help_text="Converted amount in INR"
+    )
+    # FX traceability fields
+    fx_rate_used = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Exchange rate applied for conversion (e.g., 83.250000 for 1 USD = 83.25 INR)"
+    )
+    fx_rate_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Effective date of the FX rate used"
+    )
+    fx_source = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Source of FX rate (e.g., 'CurrencyConversionRate:2024-01-01')"
+    )
+    fx_note = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Additional FX conversion notes (e.g., 'Used latest available rate')"
     )
     distance_method = models.CharField(
         max_length=20,

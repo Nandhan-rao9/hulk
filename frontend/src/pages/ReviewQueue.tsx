@@ -54,6 +54,29 @@ export default function ReviewQueue() {
     }
   };
 
+  const handleBulkApproveClean = async () => {
+    const cleanActivities = activities.filter(a =>
+      !a.is_suspicious && (a.status === 'PENDING' || a.status === 'FLAGGED')
+    );
+
+    if (cleanActivities.length === 0) {
+      alert('No clean activities to approve');
+      return;
+    }
+
+    if (!confirm(`Approve ${cleanActivities.length} clean (non-flagged) activities?`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(cleanActivities.map(a => activitiesApi.approve(a.id)));
+      fetchActivities();
+    } catch (error) {
+      console.error('Failed to bulk approve:', error);
+      alert('Some activities failed to approve. Check console for details.');
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
       PENDING: { variant: 'default', label: 'Pending' },
@@ -81,83 +104,178 @@ export default function ReviewQueue() {
 
   const renderDetailRow = (activity: Activity) => {
     if (activity.sap_detail) {
+      const d = activity.sap_detail;
       return (
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-muted-foreground">Material:</span>{' '}
-            <span className="font-medium">{activity.sap_detail.material_desc}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Plant:</span>{' '}
-            <span className="font-medium">{activity.sap_detail.plant_code}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Quantity:</span>{' '}
-            <span className="font-medium">
-              {formatNumber(activity.sap_detail.quantity_normalized)} {activity.sap_detail.unit_normalized}
-            </span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Classification:</span>{' '}
-            <Badge size="sm">{activity.sap_detail.classification_method}</Badge>
+        <div className="space-y-3">
+          <div className="font-semibold text-sm text-brand-600">SAP Material Details</div>
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Material Number:</span>{' '}
+              <span className="font-medium">{d.material_number}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Material Desc:</span>{' '}
+              <span className="font-medium">{d.material_desc}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Material Group:</span>{' '}
+              <span className="font-medium">{d.material_group || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Plant Code:</span>{' '}
+              <span className="font-medium">{d.plant_code}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Movement Type:</span>{' '}
+              <span className="font-medium">{d.movement_type}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Classification:</span>{' '}
+              <Badge size="sm">{d.classification_method}</Badge>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Raw Quantity:</span>{' '}
+              <span className="font-medium">{formatNumber(d.quantity_raw)} {d.unit_raw}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Normalized:</span>{' '}
+              <span className="font-medium">{formatNumber(d.quantity_normalized)} {d.unit_normalized}</span>
+            </div>
+            {d.conversion_note && (
+              <div>
+                <span className="text-muted-foreground">Conversion:</span>{' '}
+                <span className="font-medium text-xs">{d.conversion_note}</span>
+              </div>
+            )}
           </div>
         </div>
       );
     }
     if (activity.utility_detail) {
+      const d = activity.utility_detail;
       return (
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-muted-foreground">Service Number:</span>{' '}
-            <span className="font-medium">{activity.utility_detail.service_number}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Tariff:</span>{' '}
-            <span className="font-medium">{activity.utility_detail.tariff_category}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Consumption:</span>{' '}
-            <span className="font-medium">
-              {formatNumber(activity.utility_detail.kwh_consumed)} kWh
-            </span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Amount:</span>{' '}
-            <span className="font-medium">{formatCurrency(activity.utility_detail.billing_amount_inr)}</span>
+        <div className="space-y-3">
+          <div className="font-semibold text-sm text-brand-600">Utility Details</div>
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Service Number:</span>{' '}
+              <span className="font-medium">{d.service_number}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Tariff Category:</span>{' '}
+              <span className="font-medium">{d.tariff_category}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Unit:</span>{' '}
+              <span className="font-medium">{d.unit_raw}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Consumption:</span>{' '}
+              <span className="font-medium">{formatNumber(d.kwh_consumed)} kWh</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Billing Amount:</span>{' '}
+              <span className="font-medium">{formatCurrency(d.billing_amount_inr)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Grid EF:</span>{' '}
+              <span className="font-medium text-xs">{d.grid_emission_factor} kgCO₂e/kWh</span>
+            </div>
           </div>
         </div>
       );
     }
     if (activity.travel_detail) {
+      const d = activity.travel_detail;
       return (
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-muted-foreground">Mode:</span>{' '}
-            <span className="font-medium">{activity.travel_detail.mode}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Employee:</span>{' '}
-            <span className="font-medium">{activity.travel_detail.employee_id}</span>
-          </div>
-          {activity.travel_detail.origin && (
+        <div className="space-y-3">
+          <div className="font-semibold text-sm text-brand-600">Travel Expense Details</div>
+          <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
-              <span className="text-muted-foreground">Route:</span>{' '}
-              <span className="font-medium">
-                {activity.travel_detail.origin} → {activity.travel_detail.destination}
-              </span>
+              <span className="text-muted-foreground">Trip ID:</span>{' '}
+              <span className="font-medium">{d.trip_id}</span>
             </div>
-          )}
-          {activity.travel_detail.distance_km && (
             <div>
-              <span className="text-muted-foreground">Distance:</span>{' '}
-              <span className="font-medium">{formatNumber(activity.travel_detail.distance_km)} km</span>
+              <span className="text-muted-foreground">Employee:</span>{' '}
+              <span className="font-medium">{d.employee_id}</span>
             </div>
-          )}
-          <div>
-            <span className="text-muted-foreground">Amount:</span>{' '}
-            <span className="font-medium">
-              {formatCurrency(activity.travel_detail.amount_raw, activity.travel_detail.currency)}
-            </span>
+            <div>
+              <span className="text-muted-foreground">Mode:</span>{' '}
+              <Badge size="sm">{d.mode}</Badge>
+            </div>
+            {d.department && (
+              <div>
+                <span className="text-muted-foreground">Department:</span>{' '}
+                <span className="font-medium">{d.department}</span>
+              </div>
+            )}
+            {d.cost_center && (
+              <div>
+                <span className="text-muted-foreground">Cost Center:</span>{' '}
+                <span className="font-medium">{d.cost_center}</span>
+              </div>
+            )}
+            {d.origin && d.destination && (
+              <div>
+                <span className="text-muted-foreground">Route:</span>{' '}
+                <span className="font-medium">{d.origin} → {d.destination}</span>
+              </div>
+            )}
+            {d.distance_km && (
+              <div>
+                <span className="text-muted-foreground">Distance:</span>{' '}
+                <span className="font-medium">{formatNumber(d.distance_km)} km</span>
+              </div>
+            )}
+            {d.cabin_class && (
+              <div>
+                <span className="text-muted-foreground">Cabin Class:</span>{' '}
+                <span className="font-medium">{d.cabin_class}</span>
+              </div>
+            )}
+            {d.nights && (
+              <div>
+                <span className="text-muted-foreground">Nights:</span>{' '}
+                <span className="font-medium">{d.nights}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Currency/FX Section */}
+          <div className="mt-4 pt-4 border-t">
+            <div className="font-semibold text-sm text-purple-600 mb-2">Currency & FX Details</div>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Original Amount:</span>{' '}
+                <span className="font-medium">{formatCurrency(d.amount_raw, d.currency)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Amount in INR:</span>{' '}
+                <span className="font-medium">{d.amount_inr ? formatCurrency(d.amount_inr, 'INR') : 'N/A'}</span>
+              </div>
+              {(d as any).fx_rate_used && (
+                <>
+                  <div>
+                    <span className="text-muted-foreground">FX Rate:</span>{' '}
+                    <span className="font-medium">1 {d.currency} = {(d as any).fx_rate_used} INR</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">FX Date:</span>{' '}
+                    <span className="font-medium">{(d as any).fx_rate_date || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">FX Source:</span>{' '}
+                    <span className="font-medium text-xs">{(d as any).fx_source || 'N/A'}</span>
+                  </div>
+                  {(d as any).fx_note && (
+                    <div className="col-span-3">
+                      <span className="text-muted-foreground">FX Note:</span>{' '}
+                      <span className="font-medium text-xs">{(d as any).fx_note}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -174,14 +292,25 @@ export default function ReviewQueue() {
             {totalCount} activities • Review and approve emissions data
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => setShowFilters(!showFilters)}
-          className="gap-2"
-        >
-          <Filter className="h-4 w-4" />
-          Filters
-        </Button>
+        <div className="flex items-center space-x-3">
+          <Button
+            variant="primary"
+            onClick={handleBulkApproveClean}
+            disabled={activities.filter(a => !a.is_suspicious && (a.status === 'PENDING' || a.status === 'FLAGGED')).length === 0}
+            className="gap-2"
+          >
+            <CheckCircle className="h-4 w-4" />
+            Approve All Clean
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            className="gap-2"
+          >
+            <Filter className="h-4 w-4" />
+            Filters
+          </Button>
+        </div>
       </div>
 
       {/* Filters Panel */}

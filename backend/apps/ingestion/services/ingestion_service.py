@@ -124,6 +124,7 @@ class IngestionService:
             source_file.total_rows = stats['total']
             source_file.failed_rows = stats['failed']
             source_file.flagged_rows = stats['flagged']
+            source_file.approved_rows = stats['approved']
             source_file.save()
 
             return source_file
@@ -171,7 +172,8 @@ class IngestionService:
             raise ValueError(f"Invalid CSV headers: {e}")
 
         # Process rows
-        stats = {'total': 0, 'failed': 0, 'flagged': 0}
+        stats = {'total': 0, 'failed': 0, 'flagged': 0, 'approved': 0}
+        activities_by_row = {}  # Track activities for post-processing
 
         for row_num, row_dict in enumerate(csv_reader, start=1):
             stats['total'] += 1
@@ -213,6 +215,9 @@ class IngestionService:
                 **result.activity_data
             )
 
+            # Track activity for post-processing
+            activities_by_row[row_num] = activity
+
             # Create Detail (SAP/Utility/Travel)
             detail_model = self.parser.get_detail_model()
             detail_model.objects.create(
@@ -220,10 +225,9 @@ class IngestionService:
                 **result.detail_data
             )
 
-            # Apply suspicious flags
+            # Apply suspicious flags (single save for all flags)
             if result.suspicious_flags:
-                for flag in result.suspicious_flags:
-                    activity.flag(flag)
+                activity.flag(result.suspicious_flags)  # Pass all flags at once
                 stats['flagged'] += 1
 
                 # Log flagging
@@ -234,6 +238,20 @@ class IngestionService:
                     performed_by=None,  # System action
                     note=f"Flagged during ingestion: {', '.join(result.suspicious_flags)}"
                 )
+            else:
+                # Auto-approve clean rows
+                activity.status = 'APPROVED'
+                activity.save()
+                stats['approved'] += 1
+
+                # Log auto-approval
+                AuditLog.objects.create(
+                    activity=activity,
+                    source_file=source_file,
+                    action='APPROVED',
+                    performed_by=None,  # System action
+                    note='Auto-approved (no flags detected)'
+                )
 
             # Audit log for ingestion
             AuditLog.objects.create(
@@ -243,6 +261,39 @@ class IngestionService:
                 performed_by=self.user,
                 note=f"Ingested from {source_file.original_filename} row {row_num}"
             )
+
+        # Post-processing: Check if parser has finalization logic
+        if hasattr(self.parser, 'finalize_parsing'):
+            finalization_flags = self.parser.finalize_parsing()
+
+            # Apply finalization flags
+            for row_num, flag_names in finalization_flags.items():
+                if row_num in activities_by_row:
+                    activity = activities_by_row[row_num]
+                    was_flagged = activity.is_suspicious
+                    was_approved = activity.status == 'APPROVED'
+
+                    # Apply all finalization flags at once (single save)
+                    activity.flag(flag_names)
+
+                    # Update flagged count if newly flagged
+                    if not was_flagged and activity.is_suspicious:
+                        stats['flagged'] += 1
+
+                        # If was auto-approved, need to revert to PENDING and decrement approved count
+                        if was_approved:
+                            activity.status = 'PENDING'
+                            activity.save()
+                            stats['approved'] -= 1
+
+                    # Log finalization flags
+                    AuditLog.objects.create(
+                        activity=activity,
+                        source_file=source_file,
+                        action='FLAGGED',
+                        performed_by=None,
+                        note=f"Post-processing flags: {', '.join(flag_names)}"
+                    )
 
         return stats
 
