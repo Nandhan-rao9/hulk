@@ -56,11 +56,6 @@ export default function FileDetail() {
     return <FileText className="h-5 w-5" />;
   };
 
-  const getScopeColor = (scope: number) => {
-    if (scope === 1) return 'text-red-600';
-    if (scope === 2) return 'text-orange-600';
-    return 'text-blue-600';
-  };
 
   const handleFlag = async () => {
     if (!flagDialogActivity || !flagReason) return;
@@ -309,7 +304,7 @@ export default function FileDetail() {
                                 {activity.cabin_class && (
                                   <div>
                                     <span className="text-muted-foreground">Cabin Class:</span>{' '}
-                                    <Badge size="sm" variant="outline">{activity.cabin_class}</Badge>
+                                    <Badge size="sm">{activity.cabin_class}</Badge>
                                   </div>
                                 )}
                                 {activity.distance_km && (
