@@ -36,10 +36,10 @@ urlpatterns = [
     # Lookup upload endpoints (admin only)
     path('api/lookups/plant/upload/', PlantLookupUploadView.as_view(), name='plant-lookup-upload'),
     path('api/lookups/material-mapping/upload/', MaterialMappingUploadView.as_view(), name='material-mapping-upload'),
-
-    # Serve React frontend (catch-all, must be last)
-    re_path(r'^.*$', TemplateView.as_view(template_name='index.html'), name='frontend'),
 ]
 
-# Serve static files in production
-urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+# Serve React frontend for all non-API routes (catch-all, must be last)
+# WhiteNoise handles /assets/* automatically
+urlpatterns += [
+    re_path(r'^(?!api|admin|health).*$', TemplateView.as_view(template_name='index.html'), name='frontend'),
+]
