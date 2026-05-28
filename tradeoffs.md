@@ -54,4 +54,3 @@ Three things I deliberately did NOT build and why.
 - row level locking would be needed to prevent concurrent edits and ensure data integrity in the audit log, especially after approval when records should be immutable.
 ---
 
-**End of TRADEOFFS.md**
