@@ -78,7 +78,7 @@ ROOT_URLCONF = "hulk.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "staticfiles"],  # Serve React index.html
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

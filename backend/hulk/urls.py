@@ -3,7 +3,10 @@ URL configuration for hulk project.
 """
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
+from django.views.generic import TemplateView
+from django.conf import settings
+from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 
 from apps.activities.views import ActivityViewSet
@@ -33,4 +36,10 @@ urlpatterns = [
     # Lookup upload endpoints (admin only)
     path('api/lookups/plant/upload/', PlantLookupUploadView.as_view(), name='plant-lookup-upload'),
     path('api/lookups/material-mapping/upload/', MaterialMappingUploadView.as_view(), name='material-mapping-upload'),
+
+    # Serve React frontend (catch-all, must be last)
+    re_path(r'^.*$', TemplateView.as_view(template_name='index.html'), name='frontend'),
 ]
+
+# Serve static files in production
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
